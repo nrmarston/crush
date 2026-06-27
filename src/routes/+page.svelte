@@ -965,7 +965,8 @@
 		align-content: center;
 		justify-items: center;
 		gap: 34px;
-		padding: 28px 1rem 70px 1rem;
+		padding-block: 5rem;
+		padding-inline: 1rem;
 	}
 
 	.intro {
@@ -1616,7 +1617,6 @@
 
 		.stage {
 			gap: 26px;
-			padding-top: 22px;
 		}
 
 		.settings-popover {
@@ -1690,6 +1690,18 @@
 
 		.row-metrics {
 			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+
+	@media (max-width: 767px) {
+		.stage {
+			padding-block: 3rem;
+		}
+	}
+
+	@media (max-width: 479px) {
+		.stage {
+			padding-block: 2.5rem;
 		}
 	}
 </style>
