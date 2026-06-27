@@ -41,6 +41,10 @@ export function extensionForOutputType(outputType: OutputType): string {
 		return 'jpg';
 	}
 
+	if (outputType === 'image/png') {
+		return 'png';
+	}
+
 	return 'webp';
 }
 
@@ -51,6 +55,10 @@ export function labelForOutputType(outputType: OutputType): string {
 
 	if (outputType === 'image/jpeg') {
 		return 'JPEG';
+	}
+
+	if (outputType === 'image/png') {
+		return 'PNG';
 	}
 
 	return 'WebP';

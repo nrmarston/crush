@@ -80,8 +80,17 @@ Supported MVP outputs:
 - AVIF
 - WebP
 - JPEG
+- PNG
 
 Default output should be **AVIF**.
+
+PNG output should use lossless PNG optimization. It preserves decoded pixels and original
+dimensions, strips non-visual metadata when useful, and does not use quality or resizing presets.
+If a PNG input cannot be made smaller, keep the original PNG bytes and show:
+
+```txt
+Already optimized; original PNG kept.
+```
 
 ### 8.3 Compression Presets
 
@@ -186,6 +195,7 @@ Do not build these in the MVP:
 - Full image editor
 - Folder management
 - Advanced codec settings
+- Animated PNG preservation
 - Mobile app
 - Desktop app
 
@@ -237,6 +247,9 @@ File
 ```
 
 Use a WASM AVIF encoder when AVIF is selected.
+
+Use a WASM PNG optimizer when PNG is selected. PNG inputs should be optimized from their
+original bytes. JPEG and WebP inputs should be decoded, encoded as PNG, and then optimized.
 
 ### Background Processing
 
@@ -312,7 +325,7 @@ src/
 type CompressionPreset = {
 	id: 'quality' | 'balanced' | 'smallest';
 	label: string;
-	outputType: 'image/avif' | 'image/webp' | 'image/jpeg';
+	outputType: 'image/avif' | 'image/webp' | 'image/jpeg' | 'image/png';
 	quality: number;
 	maxWidth: number | null;
 };
@@ -339,12 +352,13 @@ type ImageResult = {
 	originalType: string;
 	originalSize: number;
 	outputName: string;
-	outputType: 'image/avif' | 'image/webp' | 'image/jpeg';
+	outputType: 'image/avif' | 'image/webp' | 'image/jpeg' | 'image/png';
 	outputSize: number;
 	width: number;
 	height: number;
 	savingsPercent: number;
 	outputBlob: Blob;
+	note?: 'already-optimized';
 	error?: string;
 };
 ```
@@ -385,6 +399,7 @@ The app should reject:
 - Empty files
 - Files above the max file size
 - Corrupt images
+- Animated PNG files when PNG output is selected
 
 Recommended MVP limits:
 
@@ -400,6 +415,9 @@ The compressed file is larger than the original.
 
 In that case, the user should still be able to download it, but the UI should make the result clear.
 
+For PNG input to PNG output, do not return a larger optimized file. Keep the original PNG bytes
+instead.
+
 ## 16. Error States
 
 Handle:
@@ -407,6 +425,7 @@ Handle:
 - Unsupported file type
 - Failed image decode
 - Failed compression
+- Failed PNG optimization
 - Browser memory issues
 - ZIP creation failure
 - Offline app cache failure
@@ -490,7 +509,6 @@ The MVP is successful when:
 
 Add later:
 
-- Lossless PNG optimization
 - Before/after comparison slider
 - Custom width resizing
 - Custom quality slider

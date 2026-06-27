@@ -41,6 +41,7 @@
 	},
 	"dependencies": {
 		"@jsquash/avif": "^2.1.1",
+		"@jsquash/oxipng": "^2.3.0",
 		"fflate": "^0.8.3"
 	}
 }

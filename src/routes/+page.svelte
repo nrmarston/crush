@@ -69,7 +69,12 @@
 	const selectedPreset = $derived(
 		presets.find((preset) => preset.id === presetId) ?? presets[1]
 	);
-	const activePreset = $derived<CompressionPreset>({ ...selectedPreset, outputType });
+	const isPngOutput = $derived(outputType === 'image/png');
+	const activePreset = $derived<CompressionPreset>(
+		isPngOutput
+			? { ...selectedPreset, outputType, quality: 1, maxWidth: null }
+			: { ...selectedPreset, outputType }
+	);
 	const completedItems = $derived(items.filter(isCompleted));
 	const compressibleCount = $derived(items.filter((item) => item.file).length);
 	const failedCount = $derived(items.filter((item) => item.status === 'failed').length);
@@ -404,6 +409,10 @@
 		return isCompleted(item) && item.result.outputSize > item.result.originalSize;
 	}
 
+	function isAlreadyOptimized(item: QueueItem): boolean {
+		return isCompleted(item) && item.result.note === 'already-optimized';
+	}
+
 	function dimensionsFor(item: QueueItem): string {
 		if (!item.width || !item.height) {
 			return '-';
@@ -471,7 +480,7 @@
 	<title>Crush - Local Image Compression</title>
 	<meta
 		name="description"
-		content="Compress JPEG, PNG, and WebP images locally into AVIF, WebP, or JPEG. No upload required."
+		content="Compress JPEG, PNG, and WebP images locally into AVIF, WebP, JPEG, or PNG. No upload required."
 	/>
 </svelte:head>
 
@@ -481,8 +490,8 @@
 			<p class="eyebrow">Local image compressor</p>
 			<h1>Crush</h1>
 			<p class="intro">
-				Drop images in, compress them locally, and download smaller AVIF, WebP, or JPEG
-				files.
+				Drop images in, compress them locally, and download smaller AVIF, WebP, JPEG, or
+				PNG files.
 			</p>
 		</div>
 		<div class="privacy">
@@ -525,7 +534,11 @@
 				<div class="setting-group">
 					<div>
 						<h2>Preset</h2>
-						<p>Balanced is the default for web assets.</p>
+						<p>
+							{isPngOutput
+								? 'PNG output is lossless and keeps original dimensions.'
+								: 'Balanced is the default for web assets.'}
+						</p>
 					</div>
 					<div class="preset-grid">
 						{#each presets as preset}
@@ -533,7 +546,7 @@
 								type="button"
 								class:selected={presetId === preset.id}
 								aria-pressed={presetId === preset.id}
-								disabled={isCompressing}
+								disabled={isCompressing || isPngOutput}
 								onclick={() => (presetId = preset.id)}
 							>
 								<span>{preset.label}</span>
@@ -546,7 +559,7 @@
 				<div class="setting-group output-row">
 					<div>
 						<h2>Output</h2>
-						<p>AVIF is the default for compact web images. WebP and JPEG are available.</p>
+						<p>AVIF is the default for compact web images. PNG keeps pixels lossless.</p>
 					</div>
 					<div class="format-toggle" aria-label="Output format">
 						{#each OUTPUT_TYPES as type}
@@ -692,6 +705,10 @@
 
 									{#if isLarger(item)}
 										<p class="notice warn">The compressed file is larger than the original.</p>
+									{/if}
+
+									{#if isAlreadyOptimized(item)}
+										<p class="notice neutral">Already optimized; original PNG kept.</p>
 									{/if}
 
 									{#if isCompleted(item)}
@@ -989,8 +1006,9 @@
 
 	.format-toggle {
 		display: inline-grid;
-		grid-template-columns: repeat(2, minmax(94px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
 		gap: 8px;
+		width: min(100%, 420px);
 		justify-self: start;
 	}
 
@@ -1053,6 +1071,11 @@
 	.notice.warn {
 		background: #fff8e8;
 		color: #7a5317;
+	}
+
+	.notice.neutral {
+		background: #eef5f2;
+		color: #315f50;
 	}
 
 	.section-heading {

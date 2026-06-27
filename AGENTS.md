@@ -100,3 +100,19 @@ output when asking for help.
 - Do not revert unrelated user changes.
 - Do not edit generated SvelteKit output such as `.svelte-kit` directly.
 - Do not introduce a different package manager workflow; this project is managed by Vite+.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `nrmarston/crush` via the `gh`
+CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo: use root `CONTEXT.md` and root `docs/adr/` when present. See
+`docs/agents/domain.md`.

@@ -1,14 +1,15 @@
 # Crush
 
 Crush is an offline-first local image compression PWA. It compresses JPEG, PNG, and WebP
-images into AVIF, WebP, or JPEG in the browser with a Web Worker, browser-native canvas
-APIs, and a WASM AVIF encoder. Images are never uploaded to a server.
+images into AVIF, WebP, JPEG, or PNG in the browser with a Web Worker,
+browser-native canvas APIs, a WASM AVIF encoder, and a WASM PNG optimizer. Images are
+never uploaded to a server.
 
 ## MVP Features
 
 - Drag-and-drop image upload
 - JPEG, PNG, and WebP input
-- AVIF output by default, with WebP and JPEG output available
+- AVIF output by default, with WebP, JPEG, and lossless PNG output available
 - High Quality, Balanced, and Smallest File presets
 - Local compression in a Web Worker
 - Before and after file size comparison
@@ -70,6 +71,7 @@ vp test
 ## Known Limitations
 
 - AVIF output uses a WASM encoder; WebP and JPEG output use browser-native canvas encoding.
-- Lossless PNG optimization, crop, watermark, and custom codec controls are not included.
+- PNG output uses lossless WASM optimization and keeps original dimensions.
+- Crop, watermark, animated PNG preservation, and custom codec controls are not included.
 - Large batches can still be limited by browser memory.
 - Local history depends on IndexedDB availability and browser storage limits.
