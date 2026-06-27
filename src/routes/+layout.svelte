@@ -26,6 +26,14 @@
 {@render children()}
 
 <style>
+	@font-face {
+		font-family: 'Soehne';
+		src: url('/fonts/soehne.woff2') format('woff2');
+		font-weight: 400;
+		font-style: normal;
+		font-display: swap;
+	}
+
 	:global(*) {
 		box-sizing: border-box;
 	}
@@ -43,7 +51,8 @@
 			#f5f0e8;
 		color: #17352c;
 		font-family:
-			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+			'Soehne', Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+			sans-serif;
 	}
 
 	:global(button),
