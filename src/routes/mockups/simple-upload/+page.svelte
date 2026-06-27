@@ -11,35 +11,67 @@
 	import { readImageMetadata } from '$lib/image-metadata';
 	import { presets } from '$lib/presets';
 	import {
-		DEFAULT_OUTPUT_TYPE,
+		MAX_BATCH_SIZE,
 		MAX_FILE_SIZE,
 		OUTPUT_TYPES,
 		SUPPORTED_INPUT_TYPES,
 		type CompressionPreset,
 		type CompressionResult,
-		type OutputType
+		type PresetId
 	} from '$lib/types';
+	import { createZip } from '$lib/zip';
 
-	type Stage = 'empty' | 'reading' | 'compressing' | 'complete' | 'failed';
+	type MockupItemStatus = 'reading' | 'waiting' | 'compressing' | 'complete' | 'failed';
+
+	type MockupQueueItem = {
+		id: string;
+		file?: File;
+		originalName: string;
+		originalType: string;
+		originalSize: number;
+		width?: number;
+		height?: number;
+		status: MockupItemStatus;
+		progress: number;
+		preset: CompressionPreset;
+		originalUrl?: string;
+		outputUrl?: string;
+		result?: CompressionResult;
+		error?: string;
+	};
+
+	type CompletedMockupQueueItem = MockupQueueItem & {
+		file: File;
+		outputUrl: string;
+		result: CompressionResult;
+	};
+
+	const statusLabels: Record<MockupItemStatus, string> = {
+		reading: 'Reading',
+		waiting: 'Waiting',
+		compressing: 'Compressing',
+		complete: 'Complete',
+		failed: 'Failed'
+	};
+
+	const presetIcons: Record<PresetId, string> = {
+		quality: 'ph-sparkle',
+		balanced: 'ph-scales',
+		smallest: 'ph-file-archive'
+	};
 
 	let fileInput = $state<HTMLInputElement>();
 	let settingsMenu = $state<HTMLElement>();
-	let stage = $state<Stage>('empty');
+	let items = $state<MockupQueueItem[]>([]);
 	let isDragging = $state(false);
 	let showSettings = $state(false);
-	let resultOutputType = $state<OutputType>(DEFAULT_OUTPUT_TYPE);
-	let progress = $state(0);
-	let error = $state('');
-	let sourceUrl = $state('');
-	let outputUrl = $state('');
-	let imageName = $state('');
-	let originalSize = $state(0);
-	let outputSize = $state(0);
-	let dimensions = $state('');
-	let outputName = $state('');
+	let isProcessing = $state(false);
+	let isZipping = $state(false);
+	let queueError = $state('');
+	let zipError = $state('');
 
 	let dragDepth = 0;
-	let progressTimer: number | undefined;
+	const progressTimers = new Map<string, number>();
 
 	const presetId = $derived(compressionSettings.presetId);
 	const outputType = $derived(compressionSettings.outputType);
@@ -52,40 +84,61 @@
 			? { ...selectedPreset, outputType, quality: 1, maxWidth: null }
 			: { ...selectedPreset, outputType }
 	);
-	const isBusy = $derived(stage === 'reading' || stage === 'compressing');
-	const hasResult = $derived(stage === 'complete' && Boolean(outputUrl));
-	const savingsPercent = $derived(calculateSavingsPercent(originalSize, outputSize));
-	const compressedBytes = $derived(Math.max(originalSize - outputSize, 0));
+	const completedItems = $derived(items.filter(isCompleted));
+	const failedCount = $derived(items.filter((item) => item.status === 'failed').length);
+	const isBusy = $derived(
+		isProcessing ||
+			items.some(
+				(item) =>
+					item.status === 'reading' ||
+					item.status === 'waiting' ||
+					item.status === 'compressing'
+			)
+	);
+	const remainingSlots = $derived(Math.max(MAX_BATCH_SIZE - items.length, 0));
+	const totalOriginalSize = $derived(
+		completedItems.reduce((total, item) => total + item.result.originalSize, 0)
+	);
+	const totalOutputSize = $derived(
+		completedItems.reduce((total, item) => total + item.result.outputSize, 0)
+	);
+	const totalSavingsPercent = $derived(
+		calculateSavingsPercent(totalOriginalSize, totalOutputSize)
+	);
+	const compressedBytes = $derived(Math.max(totalOriginalSize - totalOutputSize, 0));
+	const featuredItem = $derived(
+		items.find((item) => item.status === 'compressing') ??
+			items.find((item) => item.status === 'reading') ??
+			[...items].reverse().find((item) => item.originalUrl) ??
+			items[0]
+	);
+	const featuredProgress = $derived(featuredItem?.progress ?? 0);
 	const dropTitle = $derived(
 		isDragging
 			? 'Release to compress'
-			: stage === 'reading'
-				? 'Reading image'
-				: stage === 'compressing'
-					? 'Compressing image'
-					: stage === 'complete'
-						? 'Compressed successfully'
-						: stage === 'failed'
-							? 'Choose another image'
-							: 'Drag image here'
+			: isBusy
+				? 'Compression in progress'
+				: completedItems.length > 0
+					? 'Add more images'
+					: items.length > 0
+						? 'Review image list'
+						: 'Drag images here'
 	);
 	const dropCopy = $derived(
 		isDragging
-			? 'Compression starts as soon as you let go.'
-			: stage === 'reading'
-				? 'Checking the file before compression.'
-				: stage === 'compressing'
-					? `Creating a ${labelForOutputType(outputType)} file locally.`
-					: stage === 'complete'
-						? `${formatBytes(originalSize)} to ${formatBytes(outputSize)}.`
-						: stage === 'failed'
-							? error
-							: 'Click to upload or drop a JPEG, PNG, or WebP.'
+			? `Add up to ${remainingSlots} more image${remainingSlots === 1 ? '' : 's'}.`
+			: isBusy && featuredItem
+				? `${statusLabels[featuredItem.status]} ${featuredItem.originalName}.`
+				: remainingSlots === 0
+					? `Batch limit reached: ${MAX_BATCH_SIZE} images.`
+					: items.length > 0
+						? `${completedItems.length} complete, ${failedCount} failed, ${remainingSlots} slots open.`
+						: `Click to choose or drop JPEG, PNG, or WebP files. ${formatBytes(MAX_FILE_SIZE)} each.`
 	);
-	const fileMeta = $derived(
-		hasResult
-			? `${labelForOutputType(resultOutputType)} - ${dimensions}`
-			: dimensions || `Output: ${labelForOutputType(outputType)}`
+	const batchStatus = $derived(
+		items.length === 0
+			? `${MAX_BATCH_SIZE} image batch limit`
+			: `${completedItems.length} complete / ${items.length} total`
 	);
 
 	onMount(() => {
@@ -93,8 +146,8 @@
 	});
 
 	onDestroy(() => {
-		clearProgress();
-		revokeAssetUrls();
+		clearAllProgress();
+		revokeQueueUrls(items);
 	});
 
 	function handleWindowKeydown(event: KeyboardEvent) {
@@ -118,8 +171,8 @@
 	async function handleInputChange(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
 
-		if (input.files?.[0]) {
-			await processFile(input.files[0]);
+		if (input.files) {
+			await queueFiles(input.files);
 			input.value = '';
 		}
 	}
@@ -151,114 +204,382 @@
 		dragDepth = 0;
 		isDragging = false;
 
-		if (event.dataTransfer?.files?.[0]) {
-			await processFile(event.dataTransfer.files[0]);
+		if (event.dataTransfer?.files) {
+			await queueFiles(event.dataTransfer.files);
 		}
 	}
 
 	function openFileBrowser() {
-		if (!isBusy) {
-			fileInput?.click();
-		}
+		fileInput?.click();
 	}
 
-	async function processFile(file: File) {
-		clearProgress();
-		revokeAssetUrls();
+	async function queueFiles(fileList: FileList | File[]) {
+		const incoming = Array.from(fileList);
 
-		error = '';
-		stage = 'reading';
-		progress = 12;
-		imageName = file.name || 'Untitled image';
-		originalSize = file.size;
-		outputSize = 0;
-		dimensions = '';
-		outputName = '';
-		resultOutputType = outputType;
+		if (incoming.length === 0) {
+			return;
+		}
+
+		queueError = '';
+		zipError = '';
+
+		const slotsAvailable = MAX_BATCH_SIZE - items.length;
+
+		if (slotsAvailable <= 0) {
+			queueError = `Crush can handle up to ${MAX_BATCH_SIZE} images in one batch.`;
+			return;
+		}
+
+		const selectedFiles = incoming.slice(0, slotsAvailable);
+
+		if (incoming.length > selectedFiles.length) {
+			queueError = `Only the first ${selectedFiles.length} files were added. The batch limit is ${MAX_BATCH_SIZE}.`;
+		}
+
+		const queuedItems = selectedFiles.map((file) => createQueuedItem(file, activePreset));
+		items = [...items, ...queuedItems];
+
+		for (let index = 0; index < selectedFiles.length; index += 1) {
+			await prepareQueuedFile(queuedItems[index].id, selectedFiles[index]);
+		}
+
+		void processQueue();
+	}
+
+	function createQueuedItem(file: File, preset: CompressionPreset): MockupQueueItem {
+		return {
+			id: crypto.randomUUID(),
+			originalName: file.name || 'Untitled image',
+			originalType: file.type || 'Unknown',
+			originalSize: file.size,
+			status: 'reading',
+			progress: 12,
+			preset: clonePreset(preset)
+		};
+	}
+
+	function clonePreset(preset: CompressionPreset): CompressionPreset {
+		return {
+			id: preset.id,
+			label: preset.label,
+			description: preset.description,
+			outputType: preset.outputType,
+			quality: preset.quality,
+			maxWidth: preset.maxWidth
+		};
+	}
+
+	async function prepareQueuedFile(id: string, file: File) {
+		startItemProgress(id, 12, 42);
 
 		if (!SUPPORTED_INPUT_TYPES.includes(file.type as (typeof SUPPORTED_INPUT_TYPES)[number])) {
-			failWith('Unsupported file. Add a JPEG, PNG, or WebP image.');
+			failQueuedFile(id, 'Unsupported file. Add a JPEG, PNG, or WebP image.');
 			return;
 		}
 
 		if (file.size === 0) {
-			failWith('This file is empty.');
+			failQueuedFile(id, 'This file is empty.');
 			return;
 		}
 
 		if (file.size > MAX_FILE_SIZE) {
-			failWith(`This file is larger than the ${formatBytes(MAX_FILE_SIZE)} limit.`);
+			failQueuedFile(id, `This file is larger than the ${formatBytes(MAX_FILE_SIZE)} limit.`);
 			return;
 		}
 
-		sourceUrl = URL.createObjectURL(file);
-		startProgress(18, 42);
+		const originalUrl = URL.createObjectURL(file);
 
 		try {
 			const metadata = await readImageMetadata(file);
-			dimensions = `${metadata.width} x ${metadata.height}`;
 
-			stage = 'compressing';
-			startProgress(44, 88);
-
-			const result = await compressImage(crypto.randomUUID(), file, activePreset);
-			completeWith(result);
-		} catch (caughtError) {
-			failWith(messageFromError(caughtError, 'This image could not be compressed.'));
+			clearItemProgress(id);
+			updateItem(id, (item) => ({
+				...item,
+				file,
+				originalType: metadata.type,
+				width: metadata.width,
+				height: metadata.height,
+				status: 'waiting',
+				progress: 44,
+				originalUrl
+			}));
+		} catch {
+			URL.revokeObjectURL(originalUrl);
+			failQueuedFile(id, 'This image could not be read. It may be corrupt or unsupported.');
 		}
 	}
 
-	function completeWith(result: CompressionResult) {
-		clearProgress();
+	async function processQueue() {
+		if (isProcessing) {
+			return;
+		}
 
-		outputUrl = URL.createObjectURL(result.outputBlob);
-		outputName = result.outputName;
-		outputSize = result.outputSize;
-		originalSize = result.originalSize;
-		resultOutputType = result.outputType;
-		dimensions = `${result.width} x ${result.height}`;
-		progress = 100;
-		stage = 'complete';
+		isProcessing = true;
+
+		try {
+			while (true) {
+				const nextItem = items.find((item) => item.status === 'waiting' && item.file);
+
+				if (!nextItem?.file) {
+					break;
+				}
+
+				await compressQueuedItem(nextItem.id, nextItem.file, clonePreset(nextItem.preset));
+			}
+		} finally {
+			isProcessing = false;
+		}
 	}
 
-	function failWith(message: string) {
-		clearProgress();
-		error = message;
-		progress = 0;
-		stage = 'failed';
-	}
+	async function compressQueuedItem(id: string, file: File, preset: CompressionPreset) {
+		updateItem(id, (item) => {
+			if (item.outputUrl) {
+				URL.revokeObjectURL(item.outputUrl);
+			}
 
-	function startProgress(start: number, ceiling: number) {
-		clearProgress();
-		progress = start;
+			return {
+				...item,
+				status: 'compressing',
+				progress: 48,
+				outputUrl: undefined,
+				result: undefined,
+				error: undefined
+			};
+		});
+		startItemProgress(id, 48, 88);
 
-		progressTimer = window.setInterval(() => {
-			const remaining = ceiling - progress;
+		try {
+			const result = await compressImage(id, file, preset);
+			const outputUrl = URL.createObjectURL(result.outputBlob);
 
-			if (remaining <= 0) {
+			clearItemProgress(id);
+
+			if (!items.some((item) => item.id === id)) {
+				URL.revokeObjectURL(outputUrl);
 				return;
 			}
 
-			progress = Math.min(ceiling, progress + Math.max(1, Math.round(remaining * 0.18)));
+			updateItem(id, (item) => ({
+				...item,
+				status: 'complete',
+				progress: 100,
+				width: result.width,
+				height: result.height,
+				outputUrl,
+				result
+			}));
+		} catch (caughtError) {
+			failQueuedFile(
+				id,
+				messageFromError(
+					caughtError,
+					'This image could not be compressed. Try a smaller file or a different format.'
+				)
+			);
+		}
+	}
+
+	async function downloadZip() {
+		if (completedItems.length === 0 || isZipping) {
+			return;
+		}
+
+		isZipping = true;
+		zipError = '';
+
+		try {
+			const zip = await createZip(
+				completedItems.map((item) => ({
+					name: item.result.outputName,
+					blob: item.result.outputBlob
+				}))
+			);
+
+			downloadBlob(zip, 'crush-mockup-results.zip');
+		} catch (caughtError) {
+			zipError = messageFromError(caughtError, 'The ZIP file could not be created.');
+		} finally {
+			isZipping = false;
+		}
+	}
+
+	function removeItem(id: string) {
+		const item = items.find((candidate) => candidate.id === id);
+
+		if (!item || item.status === 'reading' || item.status === 'compressing') {
+			return;
+		}
+
+		clearItemProgress(id);
+		revokeItemUrls(item);
+		items = items.filter((candidate) => candidate.id !== id);
+		queueError = '';
+		zipError = '';
+	}
+
+	function clearQueue() {
+		if (isBusy) {
+			return;
+		}
+
+		clearAllProgress();
+		revokeQueueUrls(items);
+		items = [];
+		queueError = '';
+		zipError = '';
+	}
+
+	function failQueuedFile(id: string, message: string) {
+		clearItemProgress(id);
+		updateItem(id, (item) => ({
+			...item,
+			status: 'failed',
+			progress: 0,
+			error: message
+		}));
+	}
+
+	function startItemProgress(id: string, start: number, ceiling: number) {
+		clearItemProgress(id);
+		updateItem(id, (item) => ({
+			...item,
+			progress: start
+		}));
+
+		const timer = window.setInterval(() => {
+			updateItem(id, (item) => {
+				const remaining = ceiling - item.progress;
+
+				if (remaining <= 0) {
+					return item;
+				}
+
+				return {
+					...item,
+					progress: Math.min(ceiling, item.progress + Math.max(1, Math.round(remaining * 0.18)))
+				};
+			});
 		}, 180);
+
+		progressTimers.set(id, timer);
 	}
 
-	function clearProgress() {
-		if (progressTimer) {
-			window.clearInterval(progressTimer);
-			progressTimer = undefined;
+	function clearItemProgress(id: string) {
+		const timer = progressTimers.get(id);
+
+		if (!timer) {
+			return;
+		}
+
+		window.clearInterval(timer);
+		progressTimers.delete(id);
+	}
+
+	function clearAllProgress() {
+		for (const timer of progressTimers.values()) {
+			window.clearInterval(timer);
+		}
+
+		progressTimers.clear();
+	}
+
+	function updateItem(id: string, updater: (item: MockupQueueItem) => MockupQueueItem) {
+		items = items.map((item) => (item.id === id ? updater(item) : item));
+	}
+
+	function isCompleted(item: MockupQueueItem): item is CompletedMockupQueueItem {
+		return item.status === 'complete' && Boolean(item.file && item.outputUrl && item.result);
+	}
+
+	function isActive(item: MockupQueueItem): boolean {
+		return item.status === 'reading' || item.status === 'compressing';
+	}
+
+	function isLarger(item: MockupQueueItem): boolean {
+		return isCompleted(item) && item.result.outputSize > item.result.originalSize;
+	}
+
+	function isAlreadyOptimized(item: MockupQueueItem): boolean {
+		return isCompleted(item) && item.result.note === 'already-optimized';
+	}
+
+	function dimensionsFor(item: MockupQueueItem): string {
+		if (!item.width || !item.height) {
+			return '-';
+		}
+
+		return `${item.width} x ${item.height}`;
+	}
+
+	function detailsFor(item: MockupQueueItem): string {
+		if (isCompleted(item)) {
+			return `${labelForOutputType(item.result.outputType)} - ${dimensionsFor(item)}`;
+		}
+
+		if (item.status === 'compressing') {
+			return `Creating a ${labelForOutputType(item.preset.outputType)} file locally.`;
+		}
+
+		if (item.status === 'waiting') {
+			return `${typeLabel(item.originalType)} input - queued for ${labelForOutputType(
+				item.preset.outputType
+			)}`;
+		}
+
+		if (item.status === 'reading') {
+			return `Reading ${typeLabel(item.originalType)} input.`;
+		}
+
+		return typeLabel(item.originalType);
+	}
+
+	function typeLabel(type: string): string {
+		if (type === 'image/jpeg') {
+			return 'JPEG';
+		}
+
+		if (type === 'image/png') {
+			return 'PNG';
+		}
+
+		if (type === 'image/avif') {
+			return 'AVIF';
+		}
+
+		if (type === 'image/webp') {
+			return 'WebP';
+		}
+
+		return type || 'Unknown';
+	}
+
+	function downloadBlob(blob: Blob, fileName: string) {
+		const url = URL.createObjectURL(blob);
+		const anchor = document.createElement('a');
+
+		anchor.href = url;
+		anchor.download = fileName;
+		anchor.rel = 'noopener';
+		document.body.append(anchor);
+		anchor.click();
+		anchor.remove();
+
+		window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+
+	function revokeQueueUrls(queueItems: MockupQueueItem[]) {
+		for (const item of queueItems) {
+			revokeItemUrls(item);
 		}
 	}
 
-	function revokeAssetUrls() {
-		if (sourceUrl) {
-			URL.revokeObjectURL(sourceUrl);
-			sourceUrl = '';
+	function revokeItemUrls(item: MockupQueueItem) {
+		if (item.originalUrl) {
+			URL.revokeObjectURL(item.originalUrl);
 		}
 
-		if (outputUrl) {
-			URL.revokeObjectURL(outputUrl);
-			outputUrl = '';
+		if (item.outputUrl) {
+			URL.revokeObjectURL(item.outputUrl);
 		}
 	}
 
@@ -268,10 +589,10 @@
 </script>
 
 <svelte:head>
-	<title>Crush - Simple Upload Mockup</title>
+	<title>Crush - Simple Batch Mockup</title>
 	<meta
 		name="description"
-		content="A simplified Crush upload and compression mockup with drag-and-drop, progressive settings, and download state."
+		content="A simplified Crush local compression mockup with drag-and-drop, per-file progress, and batch download state."
 	/>
 </svelte:head>
 
@@ -330,8 +651,13 @@
 									disabled={isBusy || isPngOutput}
 									onclick={() => setCompressionPreset(preset.id)}
 								>
-									<span>{preset.label}</span>
-									<small>{preset.description}</small>
+									<span class="preset-icon" aria-hidden="true">
+										<i class={`ph ${presetIcons[preset.id]}`}></i>
+									</span>
+									<span class="preset-copy">
+										<span>{preset.label}</span>
+										<small>{preset.description}</small>
+									</span>
 								</button>
 							{/each}
 						</div>
@@ -343,8 +669,8 @@
 
 	<section class="stage" aria-labelledby="mockup-title">
 		<div class="intro">
-			<h1 id="mockup-title">Compress an image</h1>
-			<p>Big image in. Small image out.</p>
+			<h1 id="mockup-title">Compress images</h1>
+			<p>Big images in. Small files out.</p>
 		</div>
 
 		<div class="flow-card">
@@ -353,6 +679,7 @@
 				class="file-input"
 				type="file"
 				hidden
+				multiple
 				accept="image/jpeg,image/png,image/webp"
 				onchange={handleInputChange}
 			/>
@@ -362,8 +689,8 @@
 				class="drop-zone"
 				class:dragging={isDragging}
 				class:busy={isBusy}
-				class:complete={hasResult}
-				class:failed={stage === 'failed'}
+				class:complete={completedItems.length > 0 && !isBusy}
+				class:failed={items.length > 0 && failedCount === items.length}
 				aria-busy={isBusy}
 				onclick={openFileBrowser}
 				ondragenter={handleDragEnter}
@@ -372,57 +699,158 @@
 				ondrop={handleDrop}
 			>
 				<span class="drop-media" aria-hidden="true">
-					{#if sourceUrl}
-						<img src={sourceUrl} alt="" />
+					{#if featuredItem?.originalUrl}
+						<img src={featuredItem.originalUrl} alt="" />
 					{:else}
-						<i class="ph ph-upload-simple upload-icon"></i>
+						<i class="ph ph-images-square drop-icon"></i>
 					{/if}
 				</span>
 				<span class="drop-title">{dropTitle}</span>
 				<span class="drop-copy">{dropCopy}</span>
 				{#if isBusy}
 					<span class="progress-track" aria-hidden="true">
-						<span style={`width: ${progress}%`}></span>
+						<span style={`width: ${featuredProgress}%`}></span>
 					</span>
 				{/if}
 			</button>
 
-			<div class="file-line">
-				{#if hasResult}
-					<i class="ph ph-check-circle file-mark complete" aria-hidden="true"></i>
-				{:else}
-					<i class="ph ph-file-image file-mark" aria-hidden="true"></i>
-				{/if}
-				<span class="file-details">
-					<strong>{imageName || 'No image added'}</strong>
-					<span>{fileMeta}</span>
-				</span>
-				<span class="file-size">
-					{originalSize ? formatBytes(originalSize) : `${formatBytes(MAX_FILE_SIZE)} max`}
-				</span>
+			<div class="queue-head">
+				<div class="file-line">
+					<i class="ph ph-stack file-mark" aria-hidden="true"></i>
+					<span class="file-details">
+						<strong>{items.length ? `${items.length} image${items.length === 1 ? '' : 's'}` : 'No images added'}</strong>
+						<span>{batchStatus}</span>
+					</span>
+					<span class="file-size">{formatBytes(MAX_FILE_SIZE)} max</span>
+				</div>
+
+				<div class="queue-actions">
+					<button
+						type="button"
+						disabled={completedItems.length === 0 || isZipping}
+						onclick={downloadZip}
+					>
+						{isZipping ? 'Preparing ZIP' : 'Download ZIP'}
+					</button>
+					<button type="button" disabled={items.length === 0 || isBusy} onclick={clearQueue}>
+						Clear
+					</button>
+				</div>
 			</div>
 
-			{#if hasResult}
+			{#if queueError}
+				<p class="notice error">{queueError}</p>
+			{/if}
+
+			{#if zipError}
+				<p class="notice error">{zipError}</p>
+			{/if}
+
+			{#if completedItems.length > 0}
 				<div class="result-line" aria-live="polite">
 					<div>
+						<span>Files</span>
+						<strong>{completedItems.length}</strong>
+					</div>
+					<div>
 						<span>Before</span>
-						<strong>{formatBytes(originalSize)}</strong>
+						<strong>{formatBytes(totalOriginalSize)}</strong>
 					</div>
 					<div>
 						<span>After</span>
-						<strong>{formatBytes(outputSize)}</strong>
+						<strong>{formatBytes(totalOutputSize)}</strong>
 					</div>
 					<div>
 						<span>Savings</span>
-						<strong>{formatSavings(savingsPercent)}</strong>
+						<strong>{formatSavings(totalSavingsPercent)}</strong>
 					</div>
 					<div>
 						<span>Compressed</span>
 						<strong>{formatBytes(compressedBytes)}</strong>
 					</div>
 				</div>
+			{/if}
 
-				<a class="download-button" href={outputUrl} download={outputName}>Download image</a>
+			{#if items.length > 0}
+				<section class="file-list" aria-label="Compression progress" aria-live="polite">
+					{#each items as item (item.id)}
+						<article class="file-row {item.status}" class:warning={isLarger(item)}>
+							<span class="file-thumb" aria-hidden="true">
+								{#if item.originalUrl}
+									<img src={item.originalUrl} alt="" />
+								{:else}
+									<i class="ph ph-file-image"></i>
+								{/if}
+							</span>
+
+							<div class="row-main">
+								<div class="row-title">
+									<strong>{item.originalName}</strong>
+									<span class="status-badge">{statusLabels[item.status]}</span>
+								</div>
+								<span class="row-meta">{detailsFor(item)}</span>
+
+								{#if item.status !== 'failed' && item.status !== 'complete'}
+									<span
+										class="row-progress"
+										aria-label={`Compression progress for ${item.originalName}`}
+									>
+										<span style={`width: ${item.progress}%`}></span>
+									</span>
+								{/if}
+
+								{#if item.error}
+									<span class="row-notice error">{item.error}</span>
+								{/if}
+
+								{#if isLarger(item)}
+									<span class="row-notice warn">The compressed file is larger than the original.</span>
+								{/if}
+
+								{#if isAlreadyOptimized(item)}
+									<span class="row-notice neutral">Already optimized; original PNG kept.</span>
+								{/if}
+							</div>
+
+							<dl class="row-metrics">
+								<div>
+									<dt>Before</dt>
+									<dd>{formatBytes(item.originalSize)}</dd>
+								</div>
+								<div>
+									<dt>After</dt>
+									<dd>{isCompleted(item) ? formatBytes(item.result.outputSize) : '-'}</dd>
+								</div>
+								<div>
+									<dt>Savings</dt>
+									<dd>{isCompleted(item) ? formatSavings(item.result.savingsPercent) : '-'}</dd>
+								</div>
+							</dl>
+
+							<div class="row-actions">
+								{#if isCompleted(item)}
+									<a
+										class="row-download"
+										href={item.outputUrl}
+										download={item.result.outputName}
+										aria-label={`Download ${item.result.outputName}`}
+									>
+										<i class="ph ph-download-simple" aria-hidden="true"></i>
+									</a>
+								{/if}
+								<button
+									type="button"
+									class="row-remove"
+									disabled={isActive(item)}
+									aria-label={`Remove ${item.originalName}`}
+									onclick={() => removeItem(item.id)}
+								>
+									<i class="ph ph-x" aria-hidden="true"></i>
+								</button>
+							</div>
+						</article>
+					{/each}
+				</section>
 			{/if}
 		</div>
 	</section>
@@ -475,7 +903,9 @@
 		position: relative;
 	}
 
-	.icon-button {
+	.icon-button,
+	.row-download,
+	.row-remove {
 		width: 40px;
 		min-height: 40px;
 		border: 1px solid var(--color-line);
@@ -589,7 +1019,7 @@
 	}
 
 	button,
-	.download-button {
+	.row-download {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -614,7 +1044,7 @@
 	}
 
 	button:focus-visible,
-	.download-button:focus-visible {
+	.row-download:focus-visible {
 		outline: 2px solid var(--color-ink);
 		outline-offset: 3px;
 	}
@@ -626,7 +1056,7 @@
 
 	.flow-card {
 		display: grid;
-		width: min(680px, 100%);
+		width: min(760px, 100%);
 		gap: 18px;
 		border-radius: var(--radius-md);
 		padding: 28px;
@@ -646,7 +1076,7 @@
 		position: relative;
 		display: grid;
 		justify-items: center;
-		min-height: 230px;
+		min-height: 220px;
 		overflow: hidden;
 		border: 1px dashed var(--color-line);
 		border-radius: var(--radius-md);
@@ -689,14 +1119,15 @@
 		transform-origin: center;
 	}
 
-	.drop-media img {
+	.drop-media img,
+	.file-thumb img {
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
 		filter: saturate(0.92);
 	}
 
-	.upload-icon {
+	.drop-icon {
 		color: var(--color-ink);
 		font-size: 2rem;
 		line-height: 1;
@@ -714,7 +1145,7 @@
 
 	.drop-copy {
 		display: block;
-		max-width: 420px;
+		max-width: 430px;
 		margin-top: 6px;
 		color: var(--color-ink);
 		font-size: 0.9rem;
@@ -734,12 +1165,20 @@
 		background: var(--color-line);
 	}
 
-	.progress-track span {
+	.progress-track span,
+	.row-progress span {
 		display: block;
 		height: 100%;
 		border-radius: inherit;
 		background: var(--color-ink);
 		transition: width 180ms var(--ease-out);
+	}
+
+	.queue-head {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 14px;
+		align-items: center;
 	}
 
 	.file-line {
@@ -757,10 +1196,6 @@
 		color: var(--color-ink);
 		font-size: 1.38rem;
 		line-height: 1;
-	}
-
-	.file-mark.complete {
-		color: var(--color-primary);
 	}
 
 	.file-details {
@@ -792,9 +1227,29 @@
 		white-space: nowrap;
 	}
 
+	.queue-actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 8px;
+	}
+
+	.notice {
+		border-radius: var(--radius-md);
+		margin-bottom: 0;
+		padding: 12px 14px;
+		font-weight: 700;
+		line-height: 1.45;
+	}
+
+	.notice.error {
+		background: color-mix(in srgb, var(--color-error) 9%, var(--color-neutral));
+		color: var(--color-error);
+	}
+
 	.result-line {
 		display: grid;
-		grid-template-columns: repeat(4, minmax(max-content, 1fr));
+		grid-template-columns: repeat(5, minmax(0, 1fr));
 		gap: 8px;
 		border-top: 1px solid var(--color-line);
 		padding-top: 18px;
@@ -806,7 +1261,8 @@
 		gap: 4px;
 	}
 
-	.result-line span {
+	.result-line span,
+	.row-metrics dt {
 		color: var(--color-muted);
 		font-size: 0.66rem;
 		font-weight: 700;
@@ -814,15 +1270,175 @@
 		line-height: 1.35;
 	}
 
-	.result-line strong {
+	.result-line strong,
+	.row-metrics dd {
 		overflow-wrap: anywhere;
 		font-size: 0.95rem;
+		font-weight: 700;
 		line-height: 1.25;
 	}
 
-	.download-button {
-		justify-self: center;
-		min-width: 180px;
+	.file-list {
+		display: grid;
+		max-height: min(430px, 42svh);
+		gap: 10px;
+		overflow-y: auto;
+		padding-right: 4px;
+		scrollbar-width: thin;
+	}
+
+	.file-row {
+		display: grid;
+		grid-template-columns: 46px minmax(0, 1fr) minmax(190px, auto) auto;
+		gap: 12px;
+		align-items: center;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius-md);
+		padding: 12px;
+		background: var(--color-neutral);
+		transition:
+			border-color 150ms var(--ease-out),
+			transform 150ms var(--ease-out);
+	}
+
+	.file-row.compressing {
+		border-color: var(--color-primary);
+		background: color-mix(in srgb, var(--color-primary) 9%, var(--color-neutral));
+	}
+
+	.file-row.complete {
+		border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-line));
+	}
+
+	.file-row.failed {
+		border-color: var(--color-error);
+	}
+
+	.file-row.warning {
+		border-color: var(--color-primary);
+	}
+
+	.file-thumb {
+		display: grid;
+		width: 46px;
+		aspect-ratio: 1;
+		place-items: center;
+		overflow: hidden;
+		border-radius: var(--radius-sm);
+		background: var(--color-surface);
+		color: var(--color-ink);
+		font-size: 1.35rem;
+	}
+
+	.row-main {
+		display: grid;
+		gap: 6px;
+		min-width: 0;
+	}
+
+	.row-title {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+
+	.row-title strong {
+		min-width: 0;
+		overflow: hidden;
+		font-size: 0.92rem;
+		line-height: 1.3;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.status-badge {
+		flex: 0 0 auto;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius-full);
+		padding: 4px 8px;
+		background: var(--color-surface);
+		color: var(--color-ink);
+		font-size: 0.66rem;
+		font-weight: 700;
+		line-height: 1.25;
+	}
+
+	.complete .status-badge {
+		border-color: var(--color-ink);
+		background: var(--color-ink);
+		color: var(--color-neutral);
+	}
+
+	.failed .status-badge {
+		border-color: var(--color-error);
+		background: var(--color-neutral);
+		color: var(--color-error);
+	}
+
+	.row-meta,
+	.row-notice {
+		color: var(--color-muted);
+		font-size: 0.8rem;
+		line-height: 1.35;
+		overflow-wrap: anywhere;
+	}
+
+	.row-progress {
+		display: block;
+		width: 100%;
+		height: 4px;
+		overflow: hidden;
+		border-radius: var(--radius-full);
+		background: var(--color-line);
+	}
+
+	.row-notice {
+		font-weight: 700;
+	}
+
+	.row-notice.error {
+		color: var(--color-error);
+	}
+
+	.row-notice.warn,
+	.row-notice.neutral {
+		color: var(--color-ink);
+	}
+
+	.row-metrics {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 10px;
+		min-width: 190px;
+		margin: 0;
+	}
+
+	.row-metrics div {
+		min-width: 0;
+	}
+
+	.row-metrics dd {
+		margin: 3px 0 0;
+		font-size: 0.82rem;
+	}
+
+	.row-actions {
+		display: grid;
+		gap: 8px;
+		justify-items: end;
+	}
+
+	.row-download,
+	.row-remove {
+		width: 34px;
+		min-height: 34px;
+		padding: 0;
+		font-size: 0.95rem;
+	}
+
+	.row-download {
+		border-color: var(--color-primary);
 		background: var(--color-primary);
 	}
 
@@ -850,19 +1466,53 @@
 
 	.preset-list button {
 		display: grid;
+		grid-template-columns: 34px minmax(0, 1fr);
+		align-items: center;
+		gap: 10px;
 		justify-items: start;
-		min-height: 0;
+		min-height: 64px;
 		border-color: var(--color-line);
 		border-radius: var(--radius-md);
 		padding: 12px;
 		text-align: left;
 	}
 
+	.preset-icon {
+		display: grid;
+		width: 34px;
+		height: 34px;
+		place-items: center;
+		border-radius: var(--radius-sm);
+		background: color-mix(in srgb, var(--color-primary) 22%, var(--color-neutral));
+		color: var(--color-ink);
+		font-size: 1.08rem;
+		line-height: 1;
+	}
+
+	.preset-icon i {
+		line-height: 1;
+	}
+
+	.preset-copy {
+		display: grid;
+		gap: 4px;
+		min-width: 0;
+	}
+
+	.preset-copy span,
+	.preset-copy small {
+		overflow-wrap: anywhere;
+	}
+
 	.preset-list small {
-		margin-top: 4px;
+		margin-top: 0;
 		color: var(--color-ink);
 		font-weight: 400;
 		line-height: 1.35;
+	}
+
+	.preset-list button.selected .preset-icon {
+		background: var(--color-primary);
 	}
 
 	.preset-list button.selected small {
@@ -916,14 +1566,19 @@
 
 	@media (hover: hover) and (pointer: fine) {
 		button:hover:not(:disabled):not(.drop-zone),
-		.download-button:hover {
+		.row-download:hover {
 			background: var(--color-primary-soft);
+			transform: translateY(-1px);
+		}
+
+		.file-row:hover {
+			border-color: var(--color-ink);
 			transform: translateY(-1px);
 		}
 	}
 
 	button:active:not(:disabled):not(.drop-zone),
-	.download-button:active {
+	.row-download:active {
 		transform: scale(0.97);
 	}
 
@@ -934,6 +1589,17 @@
 	@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
 		.drop-zone:hover:not(:disabled) .drop-media {
 			transform: translateY(-4px) scale(1.02);
+		}
+	}
+
+	@media (max-width: 820px) {
+		.file-row {
+			grid-template-columns: 46px minmax(0, 1fr) auto;
+		}
+
+		.row-metrics {
+			grid-column: 2 / -1;
+			width: 100%;
 		}
 	}
 
@@ -961,8 +1627,12 @@
 		}
 
 		.drop-zone {
-			min-height: 230px;
+			min-height: 220px;
 			padding: 30px 20px;
+		}
+
+		.queue-head {
+			grid-template-columns: 1fr;
 		}
 
 		.file-line {
@@ -974,12 +1644,46 @@
 			justify-self: start;
 		}
 
+		.queue-actions {
+			justify-content: stretch;
+		}
+
+		.queue-actions button {
+			flex: 1 1 150px;
+		}
+
 		.segmented {
 			grid-template-columns: 1fr;
 		}
 
 		.result-line {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.file-list {
+			max-height: none;
+			overflow: visible;
+			padding-right: 0;
+		}
+	}
+
+	@media (max-width: 540px) {
+		.file-row {
+			grid-template-columns: 40px minmax(0, 1fr);
+		}
+
+		.file-thumb {
+			width: 40px;
+		}
+
+		.row-actions {
+			grid-column: 2;
+			display: flex;
+			justify-content: flex-start;
+		}
+
+		.row-metrics {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
 	}
 </style>

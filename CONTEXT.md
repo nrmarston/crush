@@ -24,9 +24,14 @@ _Avoid_: Still image
 A result preview that compares original and compressed image appearance at matched display size.
 _Avoid_: Pixel diff, dimension comparison
 
+**Compression Progress**:
+A per-file progress indicator for local reading and compression work in the browser.
+_Avoid_: Upload progress
+
 ## Relationships
 
 - A compression job has exactly one **Output Format**
+- **Compression Progress** never means file transfer to a server
 - A completed compression result may have one **Visual Comparison**
 - A batch compression job may have many **Visual Comparisons**, one for each completed result
 - A **Visual Comparison** is the primary image preview for a completed compression result
