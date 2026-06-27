@@ -28,29 +28,29 @@ Existing tools can be too technical, outdated, or dependent on internet access. 
 
 ### Primary Users
 
-* Web developers
-* Designers
-* Freelancers
-* Small agency teams
-* People preparing assets for websites
+- Web developers
+- Designers
+- Freelancers
+- Small agency teams
+- People preparing assets for websites
 
 ### Secondary Users
 
-* Bloggers
-* Content creators
-* Small business owners
-* Students building portfolio sites
+- Bloggers
+- Content creators
+- Small business owners
+- Students building portfolio sites
 
 ## 7. User Goals
 
 Users want to:
 
-* Make image files smaller
-* Avoid uploading private/client images to a server
-* Compress multiple images quickly
-* See how much space was saved
-* Download optimized files
-* Use the app even when offline
+- Make image files smaller
+- Avoid uploading private/client images to a server
+- Compress multiple images quickly
+- See how much space was saved
+- Download optimized files
+- Use the app even when offline
 
 ## 8. MVP Scope
 
@@ -60,16 +60,16 @@ Users can drag and drop images into the app.
 
 Supported input formats:
 
-* JPEG
-* PNG
-* WebP
+- JPEG
+- PNG
+- WebP
 
 The app should show:
 
-* File name
-* Original file size
-* Image dimensions
-* File type
+- File name
+- Original file size
+- Image dimensions
+- File type
 
 ### 8.2 Image Compression
 
@@ -77,8 +77,8 @@ Users can compress images locally in the browser.
 
 Supported MVP outputs:
 
-* WebP
-* JPEG
+- WebP
+- JPEG
 
 Default output should be **WebP**.
 
@@ -102,19 +102,19 @@ Prioritizes file size reduction.
 
 For each compressed image, show:
 
-* Original file size
-* Compressed file size
-* Percentage saved
-* Output format
-* Output dimensions
-* Compression status
+- Original file size
+- Compressed file size
+- Percentage saved
+- Output format
+- Output dimensions
+- Compression status
 
 Status values:
 
-* Waiting
-* Compressing
-* Complete
-* Failed
+- Waiting
+- Compressing
+- Complete
+- Failed
 
 ### 8.5 Image Preview
 
@@ -122,8 +122,8 @@ Users can preview the compressed result.
 
 MVP preview can be simple:
 
-* Original preview
-* Compressed preview
+- Original preview
+- Compressed preview
 
 A draggable before/after comparison slider is optional for later.
 
@@ -131,8 +131,8 @@ A draggable before/after comparison slider is optional for later.
 
 Users can download:
 
-* A single compressed image
-* All compressed images as a ZIP file
+- A single compressed image
+- All compressed images as a ZIP file
 
 Downloaded files should keep readable names.
 
@@ -149,9 +149,9 @@ The app should be installable as a PWA.
 
 After the first visit, users should be able to:
 
-* Open the app offline
-* Compress images offline
-* Download results offline
+- Open the app offline
+- Compress images offline
+- Download results offline
 
 ### 8.8 Local History
 
@@ -159,12 +159,12 @@ The app should save recent compression jobs locally.
 
 A job should include:
 
-* Date created
-* Number of images
-* Total original size
-* Total compressed size
-* Total savings
-* Compressed output files
+- Date created
+- Number of images
+- Total original size
+- Total compressed size
+- Total savings
+- Compressed output files
 
 Users should be able to clear local history.
 
@@ -172,21 +172,21 @@ Users should be able to clear local history.
 
 Do not build these in the MVP:
 
-* User accounts
-* Cloud storage
-* Server-side compression
-* Payments
-* Team accounts
-* Public image URLs
-* CDN delivery
-* AI image editing
-* Cropping
-* Watermarks
-* Full image editor
-* Folder management
-* Advanced codec settings
-* Mobile app
-* Desktop app
+- User accounts
+- Cloud storage
+- Server-side compression
+- Payments
+- Team accounts
+- Public image URLs
+- CDN delivery
+- AI image editing
+- Cropping
+- Watermarks
+- Full image editor
+- Folder management
+- Advanced codec settings
+- Mobile app
+- Desktop app
 
 ## 10. Core User Flow
 
@@ -205,9 +205,9 @@ User opens Crush
 
 Use:
 
-* Vite
-* Svelte
-* TypeScript
+- Vite
+- Svelte
+- TypeScript
 
 Reason:
 
@@ -217,9 +217,9 @@ Crush is an interactive tool. Svelte fits this better than a mostly static frame
 
 Use:
 
-* vite-plugin-pwa
-* Service worker
-* Cache Storage
+- vite-plugin-pwa
+- Service worker
+- Cache Storage
 
 The app shell should be cached for offline use.
 
@@ -243,30 +243,30 @@ Use Web Workers.
 
 Main thread:
 
-* Handles UI
-* Receives file input
-* Shows progress
-* Displays results
+- Handles UI
+- Receives file input
+- Shows progress
+- Displays results
 
 Worker thread:
 
-* Decodes images
-* Compresses images
-* Returns compressed blobs
-* Reports progress
+- Decodes images
+- Compresses images
+- Returns compressed blobs
+- Reports progress
 
 ### Local Storage
 
 Use IndexedDB for:
 
-* Job history
-* Compressed output blobs
-* Metadata
+- Job history
+- Compressed output blobs
+- Metadata
 
 Use Cache Storage for:
 
-* App files
-* PWA assets
+- App files
+- PWA assets
 
 ### ZIP Downloads
 
@@ -309,11 +309,11 @@ src/
 
 ```ts
 type CompressionPreset = {
-  id: "quality" | "balanced" | "smallest";
-  label: string;
-  outputType: "image/webp" | "image/jpeg";
-  quality: number;
-  maxWidth: number | null;
+	id: 'quality' | 'balanced' | 'smallest';
+	label: string;
+	outputType: 'image/webp' | 'image/jpeg';
+	quality: number;
+	maxWidth: number | null;
 };
 ```
 
@@ -321,11 +321,11 @@ type CompressionPreset = {
 
 ```ts
 type ImageJob = {
-  id: string;
-  createdAt: string;
-  presetId: "quality" | "balanced" | "smallest";
-  status: "waiting" | "compressing" | "complete" | "failed";
-  files: ImageResult[];
+	id: string;
+	createdAt: string;
+	presetId: 'quality' | 'balanced' | 'smallest';
+	status: 'waiting' | 'compressing' | 'complete' | 'failed';
+	files: ImageResult[];
 };
 ```
 
@@ -333,18 +333,18 @@ type ImageJob = {
 
 ```ts
 type ImageResult = {
-  id: string;
-  originalName: string;
-  originalType: string;
-  originalSize: number;
-  outputName: string;
-  outputType: "image/webp" | "image/jpeg";
-  outputSize: number;
-  width: number;
-  height: number;
-  savingsPercent: number;
-  outputBlob: Blob;
-  error?: string;
+	id: string;
+	originalName: string;
+	originalType: string;
+	originalSize: number;
+	outputName: string;
+	outputType: 'image/webp' | 'image/jpeg';
+	outputSize: number;
+	width: number;
+	height: number;
+	savingsPercent: number;
+	outputBlob: Blob;
+	error?: string;
 };
 ```
 
@@ -352,27 +352,27 @@ type ImageResult = {
 
 ```ts
 const presets = {
-  quality: {
-    id: "quality",
-    label: "High Quality",
-    outputType: "image/webp",
-    quality: 0.9,
-    maxWidth: null,
-  },
-  balanced: {
-    id: "balanced",
-    label: "Balanced",
-    outputType: "image/webp",
-    quality: 0.78,
-    maxWidth: 2400,
-  },
-  smallest: {
-    id: "smallest",
-    label: "Smallest File",
-    outputType: "image/webp",
-    quality: 0.62,
-    maxWidth: 1600,
-  },
+	quality: {
+		id: 'quality',
+		label: 'High Quality',
+		outputType: 'image/webp',
+		quality: 0.9,
+		maxWidth: null
+	},
+	balanced: {
+		id: 'balanced',
+		label: 'Balanced',
+		outputType: 'image/webp',
+		quality: 0.78,
+		maxWidth: 2400
+	},
+	smallest: {
+		id: 'smallest',
+		label: 'Smallest File',
+		outputType: 'image/webp',
+		quality: 0.62,
+		maxWidth: 1600
+	}
 };
 ```
 
@@ -380,16 +380,16 @@ const presets = {
 
 The app should reject:
 
-* Unsupported file types
-* Empty files
-* Files above the max file size
-* Corrupt images
+- Unsupported file types
+- Empty files
+- Files above the max file size
+- Corrupt images
 
 Recommended MVP limits:
 
-* Max file size: 25 MB per image
-* Max batch size: 25 images
-* Supported input: JPEG, PNG, WebP
+- Max file size: 25 MB per image
+- Max batch size: 25 images
+- Supported input: JPEG, PNG, WebP
 
 If compression makes the file larger, show a warning:
 
@@ -403,13 +403,13 @@ In that case, the user should still be able to download it, but the UI should ma
 
 Handle:
 
-* Unsupported file type
-* Failed image decode
-* Failed compression
-* Browser memory issues
-* ZIP creation failure
-* Offline app cache failure
-* IndexedDB unavailable
+- Unsupported file type
+- Failed image decode
+- Failed compression
+- Browser memory issues
+- ZIP creation failure
+- Offline app cache failure
+- IndexedDB unavailable
 
 Errors should be plain and useful.
 
@@ -423,82 +423,82 @@ This image could not be compressed. Try a smaller file or a different format.
 
 The MVP is successful when:
 
-* A user can compress one image locally
-* A user can compress multiple images locally
-* A user can download one result
-* A user can download all results as a ZIP
-* The app works offline after first visit
-* The UI clearly shows file-size savings
-* No backend is required
-* No account is required
-* Images never leave the device
+- A user can compress one image locally
+- A user can compress multiple images locally
+- A user can download one result
+- A user can download all results as a ZIP
+- The app works offline after first visit
+- The UI clearly shows file-size savings
+- No backend is required
+- No account is required
+- Images never leave the device
 
 ## 18. Build Order
 
 ### Milestone 1: Single Image Compression
 
-* Create Vite + Svelte app
-* Add drag-and-drop upload
-* Read image metadata
-* Compress one image to WebP
-* Show original size
-* Show compressed size
-* Download compressed image
+- Create Vite + Svelte app
+- Add drag-and-drop upload
+- Read image metadata
+- Compress one image to WebP
+- Show original size
+- Show compressed size
+- Download compressed image
 
 ### Milestone 2: Batch Compression
 
-* Support multiple files
-* Add queue state
-* Add progress state
-* Compress images one by one
-* Show result cards
-* Handle failures per file
+- Support multiple files
+- Add queue state
+- Add progress state
+- Compress images one by one
+- Show result cards
+- Handle failures per file
 
 ### Milestone 3: ZIP Download
 
-* Add download all
-* Generate ZIP in browser
-* Use clean output filenames
+- Add download all
+- Generate ZIP in browser
+- Use clean output filenames
 
 ### Milestone 4: PWA Offline Support
 
-* Add app manifest
-* Add service worker
-* Cache app shell
-* Test offline reload
-* Add install prompt where appropriate
+- Add app manifest
+- Add service worker
+- Cache app shell
+- Test offline reload
+- Add install prompt where appropriate
 
 ### Milestone 5: Local History
 
-* Add IndexedDB
-* Save completed jobs
-* Show recent jobs
-* Allow re-download
-* Add clear history button
+- Add IndexedDB
+- Save completed jobs
+- Show recent jobs
+- Allow re-download
+- Add clear history button
 
 ### Milestone 6: Polish
 
-* Improve empty state
-* Improve error states
-* Add storage warning
-* Add privacy message
-* Add keyboard-accessible controls
-* Add responsive layout
+- Improve empty state
+- Improve error states
+- Add storage warning
+- Add privacy message
+- Add keyboard-accessible controls
+- Add responsive layout
 
 ## 19. Future Features
 
 Add later:
 
-* AVIF output
-* Lossless PNG optimization
-* Before/after comparison slider
-* Custom width resizing
-* Custom quality slider
-* Preset saving
-* Desktop wrapper with Tauri
-* Cloud sync
-* Optional account
-* Shareable compression reports
+- AVIF output
+- Lossless PNG optimization
+- Before/after comparison slider
+- Custom width resizing
+- Custom quality slider
+- Preset saving
+- Desktop wrapper with Tauri
+- Cloud sync
+- Optional account
+- Shareable compression reports
 
 ## 20. Positioning
 
@@ -508,9 +508,9 @@ Compress images locally. No upload required.
 
 ### Alternate Taglines
 
-* Offline image compression in your browser.
-* Smaller images. Faster websites.
-* Drop images in. Get smaller files out.
+- Offline image compression in your browser.
+- Smaller images. Faster websites.
+- Drop images in. Get smaller files out.
 
 ## 21. Final MVP Definition
 
