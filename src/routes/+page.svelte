@@ -1,9 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import {
+		compressionSettings,
+		initializeCompressionSettings,
+		setCompressionOutputType,
+		setCompressionPreset
+	} from '$lib/compression-settings.svelte';
 	import { compressImage } from '$lib/compress';
 	import { clearHistoryJobs, loadHistoryJobs, saveHistoryJob } from '$lib/db';
 	import { readImageMetadata } from '$lib/image-metadata';
-	import { defaultPresetId, presets } from '$lib/presets';
+	import { presets } from '$lib/presets';
 	import VisualComparison from '$lib/VisualComparison.svelte';
 	import { createZip } from '$lib/zip';
 	import {
@@ -14,7 +20,6 @@
 		labelForOutputType
 	} from '$lib/format';
 	import {
-		DEFAULT_OUTPUT_TYPE,
 		MAX_BATCH_SIZE,
 		MAX_FILE_SIZE,
 		OUTPUT_TYPES,
@@ -22,9 +27,7 @@
 		type CompressionHistoryJob,
 		type CompressionPreset,
 		type CompressionResult,
-		type CompressionStatus,
-		type OutputType,
-		type PresetId
+		type CompressionStatus
 	} from '$lib/types';
 
 	type QueueItem = {
@@ -58,8 +61,6 @@
 	let fileInput = $state<HTMLInputElement>();
 	let items = $state<QueueItem[]>([]);
 	let history = $state<CompressionHistoryJob[]>([]);
-	let presetId = $state<PresetId>(defaultPresetId);
-	let outputType = $state<OutputType>(DEFAULT_OUTPUT_TYPE);
 	let isDragging = $state(false);
 	let isCompressing = $state(false);
 	let isZipping = $state(false);
@@ -67,6 +68,8 @@
 	let zipError = $state('');
 	let historyError = $state('');
 
+	const presetId = $derived(compressionSettings.presetId);
+	const outputType = $derived(compressionSettings.outputType);
 	const selectedPreset = $derived(
 		presets.find((preset) => preset.id === presetId) ?? presets[1]
 	);
@@ -90,6 +93,7 @@
 	);
 
 	onMount(() => {
+		initializeCompressionSettings();
 		void refreshHistory();
 
 		return () => {
@@ -548,7 +552,7 @@
 								class:selected={presetId === preset.id}
 								aria-pressed={presetId === preset.id}
 								disabled={isCompressing || isPngOutput}
-								onclick={() => (presetId = preset.id)}
+								onclick={() => setCompressionPreset(preset.id)}
 							>
 								<span>{preset.label}</span>
 								<small>{preset.description}</small>
@@ -569,7 +573,7 @@
 								class:selected={outputType === type}
 								aria-pressed={outputType === type}
 								disabled={isCompressing}
-								onclick={() => (outputType = type)}
+								onclick={() => setCompressionOutputType(type)}
 							>
 								{labelForOutputType(type)}
 							</button>
@@ -829,7 +833,7 @@
 	.intro {
 		max-width: 540px;
 		margin-bottom: 0;
-		color: var(--color-muted);
+		color: var(--color-ink);
 		font-size: 1.06rem;
 		line-height: 1.55;
 		letter-spacing: 0.01em;
@@ -906,7 +910,7 @@
 	.dropzone.dragging,
 	.dropzone:focus-visible {
 		border-color: var(--color-ink);
-		background: #fff8fd;
+		background: var(--color-primary-soft);
 		box-shadow: inset 0 0 0 2px var(--color-primary-soft);
 		transform: translateY(-1px);
 	}
@@ -933,7 +937,7 @@
 	.result-title p,
 	.muted {
 		margin-bottom: 0;
-		color: var(--color-muted);
+		color: var(--color-ink);
 		font-size: 0.88rem;
 		line-height: 1.45;
 		letter-spacing: 0.005em;
@@ -1031,7 +1035,7 @@
 
 	.preset-grid small {
 		margin-top: 6px;
-		color: var(--color-muted);
+		color: var(--color-ink);
 		font-weight: 400;
 		line-height: 1.35;
 	}
@@ -1072,7 +1076,7 @@
 	}
 
 	.actions span {
-		color: var(--color-muted);
+		color: var(--color-ink);
 	}
 
 	.summary {
@@ -1090,7 +1094,7 @@
 
 	.summary span,
 	dt {
-		color: var(--color-muted);
+		color: var(--color-ink);
 		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.02em;
@@ -1098,7 +1102,8 @@
 	}
 
 	.summary span {
-		color: rgba(255, 255, 255, 0.72);
+		color: var(--color-neutral);
+		opacity: 0.72;
 	}
 
 	.summary strong {
@@ -1114,13 +1119,13 @@
 	}
 
 	.notice.error {
-		background: #fff0ed;
+		background: var(--color-neutral);
 		color: var(--color-error);
 	}
 
 	.notice.warn {
-		background: #fff8e8;
-		color: #7a5317;
+		background: var(--color-primary-soft);
+		color: var(--color-ink);
 	}
 
 	.notice.neutral {
@@ -1134,7 +1139,7 @@
 
 	.empty-state {
 		padding: 30px;
-		color: var(--color-muted);
+		color: var(--color-ink);
 	}
 
 	.empty-state p {
@@ -1162,7 +1167,7 @@
 	}
 
 	.result-card.warning {
-		border-color: #d99b48;
+		border-color: var(--color-primary);
 	}
 
 	.result-body {
@@ -1202,7 +1207,8 @@
 	}
 
 	.failed .status-badge {
-		background: #fff0ed;
+		border-color: var(--color-error);
+		background: var(--color-neutral);
 		color: var(--color-error);
 	}
 
@@ -1256,7 +1262,7 @@
 	.history-item {
 		display: grid;
 		gap: 12px;
-		border-top: 1px solid rgba(0, 0, 0, 0.16);
+		border-top: 1px solid var(--color-line);
 		padding-top: 12px;
 	}
 
@@ -1267,7 +1273,8 @@
 
 	.history-item span {
 		margin-top: 4px;
-		color: rgba(0, 0, 0, 0.64);
+		color: var(--color-ink);
+		opacity: 0.64;
 	}
 
 	.history-item dl {

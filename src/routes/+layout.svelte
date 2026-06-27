@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '@phosphor-icons/web/regular';
 	import favicon from '$lib/assets/favicon.svg';
 	import { onMount } from 'svelte';
 	import { pwaInfo } from 'virtual:pwa-info';
@@ -41,7 +42,6 @@
 		--color-line: #e5e7eb;
 		--color-neutral: #ffffff;
 		--color-surface: #f7f7f7;
-		--color-muted: #5f6368;
 		--color-error: #d92d20;
 		--radius-sm: 4px;
 		--radius-md: 8px;

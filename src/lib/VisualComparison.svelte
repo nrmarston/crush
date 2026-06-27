@@ -199,7 +199,7 @@
 	}
 
 	.preview-status.failed {
-		background: #fff0ed;
+		background: var(--color-neutral);
 		color: var(--color-error);
 	}
 
@@ -211,7 +211,7 @@
 		border: 0;
 		border-radius: 0;
 		background: transparent;
-		color: var(--color-muted);
+		color: var(--color-ink);
 		text-align: center;
 	}
 </style>
