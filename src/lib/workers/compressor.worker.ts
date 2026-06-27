@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import encodeAvif from '@jsquash/avif/encode.js';
 import type {
 	CompressionPreset,
 	CompressionResult,
@@ -60,10 +61,7 @@ async function compressFile(
 
 		context.drawImage(bitmap, 0, 0, dimensions.width, dimensions.height);
 
-		const outputBlob = await canvas.convertToBlob({
-			type: preset.outputType,
-			quality: preset.quality
-		});
+		const outputBlob = await createOutputBlob(canvas, context, preset);
 
 		if (outputBlob.type && outputBlob.type !== preset.outputType) {
 			throw new Error(`${labelForOutputType(preset.outputType)} output is not supported here.`);
@@ -87,6 +85,27 @@ async function compressFile(
 	}
 }
 
+async function createOutputBlob(
+	canvas: OffscreenCanvas,
+	context: OffscreenCanvasRenderingContext2D,
+	preset: CompressionPreset
+): Promise<Blob> {
+	if (preset.outputType === 'image/avif') {
+		const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+		const buffer = await encodeAvif(imageData, {
+			bitDepth: 8,
+			quality: qualityToPercent(preset.quality)
+		});
+
+		return new Blob([buffer], { type: preset.outputType });
+	}
+
+	return canvas.convertToBlob({
+		type: preset.outputType,
+		quality: preset.quality
+	});
+}
+
 function getOutputDimensions(width: number, height: number, maxWidth: number | null) {
 	if (!maxWidth || width <= maxWidth) {
 		return { width, height };
@@ -98,6 +117,10 @@ function getOutputDimensions(width: number, height: number, maxWidth: number | n
 		width: Math.round(width * scale),
 		height: Math.round(height * scale)
 	};
+}
+
+function qualityToPercent(quality: number): number {
+	return Math.min(Math.max(Math.round(quality * 100), 1), 100);
 }
 
 function calculateSavingsPercent(originalSize: number, outputSize: number): number {
@@ -115,11 +138,31 @@ function makeOutputName(originalName: string, outputType: OutputType): string {
 			.replace(/[^\w.-]+/g, '-')
 			.replace(/^-+|-+$/g, '') || 'image';
 
-	return `${baseName}-crushed.${outputType === 'image/jpeg' ? 'jpg' : 'webp'}`;
+	return `${baseName}-crushed.${extensionForOutputType(outputType)}`;
+}
+
+function extensionForOutputType(outputType: OutputType): string {
+	if (outputType === 'image/avif') {
+		return 'avif';
+	}
+
+	if (outputType === 'image/jpeg') {
+		return 'jpg';
+	}
+
+	return 'webp';
 }
 
 function labelForOutputType(outputType: OutputType): string {
-	return outputType === 'image/jpeg' ? 'JPEG' : 'WebP';
+	if (outputType === 'image/avif') {
+		return 'AVIF';
+	}
+
+	if (outputType === 'image/jpeg') {
+		return 'JPEG';
+	}
+
+	return 'WebP';
 }
 
 function post(message: CompressorResponse) {

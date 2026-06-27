@@ -77,10 +77,11 @@ Users can compress images locally in the browser.
 
 Supported MVP outputs:
 
+- AVIF
 - WebP
 - JPEG
 
-Default output should be **WebP**.
+Default output should be **AVIF**.
 
 ### 8.3 Compression Presets
 
@@ -139,8 +140,8 @@ Downloaded files should keep readable names.
 Example:
 
 ```txt
-hero.jpg → hero-crushed.webp
-product-photo.png → product-photo-crushed.webp
+hero.jpg → hero-crushed.avif
+product-photo.png → product-photo-crushed.avif
 ```
 
 ### 8.7 Offline Support
@@ -225,7 +226,7 @@ The app shell should be cached for offline use.
 
 ### Compression
 
-Start with browser-native compression:
+Use browser-native compression for WebP and JPEG:
 
 ```txt
 File
@@ -235,7 +236,7 @@ File
 → compressed Blob
 ```
 
-Do not start with custom WASM codecs.
+Use a WASM AVIF encoder when AVIF is selected.
 
 ### Background Processing
 
@@ -311,7 +312,7 @@ src/
 type CompressionPreset = {
 	id: 'quality' | 'balanced' | 'smallest';
 	label: string;
-	outputType: 'image/webp' | 'image/jpeg';
+	outputType: 'image/avif' | 'image/webp' | 'image/jpeg';
 	quality: number;
 	maxWidth: number | null;
 };
@@ -338,7 +339,7 @@ type ImageResult = {
 	originalType: string;
 	originalSize: number;
 	outputName: string;
-	outputType: 'image/webp' | 'image/jpeg';
+	outputType: 'image/avif' | 'image/webp' | 'image/jpeg';
 	outputSize: number;
 	width: number;
 	height: number;
@@ -355,21 +356,21 @@ const presets = {
 	quality: {
 		id: 'quality',
 		label: 'High Quality',
-		outputType: 'image/webp',
+		outputType: 'image/avif',
 		quality: 0.9,
 		maxWidth: null
 	},
 	balanced: {
 		id: 'balanced',
 		label: 'Balanced',
-		outputType: 'image/webp',
+		outputType: 'image/avif',
 		quality: 0.78,
 		maxWidth: 2400
 	},
 	smallest: {
 		id: 'smallest',
 		label: 'Smallest File',
-		outputType: 'image/webp',
+		outputType: 'image/avif',
 		quality: 0.62,
 		maxWidth: 1600
 	}
@@ -440,7 +441,7 @@ The MVP is successful when:
 - Create Vite + Svelte app
 - Add drag-and-drop upload
 - Read image metadata
-- Compress one image to WebP
+- Compress one image to AVIF
 - Show original size
 - Show compressed size
 - Download compressed image
@@ -489,7 +490,6 @@ The MVP is successful when:
 
 Add later:
 
-- AVIF output
 - Lossless PNG optimization
 - Before/after comparison slider
 - Custom width resizing

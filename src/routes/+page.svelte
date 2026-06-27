@@ -13,8 +13,10 @@
 		labelForOutputType
 	} from '$lib/format';
 	import {
+		DEFAULT_OUTPUT_TYPE,
 		MAX_BATCH_SIZE,
 		MAX_FILE_SIZE,
+		OUTPUT_TYPES,
 		SUPPORTED_INPUT_TYPES,
 		type CompressionHistoryJob,
 		type CompressionPreset,
@@ -56,7 +58,7 @@
 	let items = $state<QueueItem[]>([]);
 	let history = $state<CompressionHistoryJob[]>([]);
 	let presetId = $state<PresetId>(defaultPresetId);
-	let outputType = $state<OutputType>('image/webp');
+	let outputType = $state<OutputType>(DEFAULT_OUTPUT_TYPE);
 	let isDragging = $state(false);
 	let isCompressing = $state(false);
 	let isZipping = $state(false);
@@ -419,6 +421,10 @@
 			return 'PNG';
 		}
 
+		if (type === 'image/avif') {
+			return 'AVIF';
+		}
+
 		if (type === 'image/webp') {
 			return 'WebP';
 		}
@@ -465,7 +471,7 @@
 	<title>Crush - Local Image Compression</title>
 	<meta
 		name="description"
-		content="Compress JPEG, PNG, and WebP images locally in your browser. No upload required."
+		content="Compress JPEG, PNG, and WebP images locally into AVIF, WebP, or JPEG. No upload required."
 	/>
 </svelte:head>
 
@@ -475,7 +481,8 @@
 			<p class="eyebrow">Local image compressor</p>
 			<h1>Crush</h1>
 			<p class="intro">
-				Drop images in, compress them locally, and download smaller WebP or JPEG files.
+				Drop images in, compress them locally, and download smaller AVIF, WebP, or JPEG
+				files.
 			</p>
 		</div>
 		<div class="privacy">
@@ -539,27 +546,20 @@
 				<div class="setting-group output-row">
 					<div>
 						<h2>Output</h2>
-						<p>WebP is smaller for most web images. JPEG is available for compatibility.</p>
+						<p>AVIF is the default for compact web images. WebP and JPEG are available.</p>
 					</div>
 					<div class="format-toggle" aria-label="Output format">
-						<button
-							type="button"
-							class:selected={outputType === 'image/webp'}
-							aria-pressed={outputType === 'image/webp'}
-							disabled={isCompressing}
-							onclick={() => (outputType = 'image/webp')}
-						>
-							WebP
-						</button>
-						<button
-							type="button"
-							class:selected={outputType === 'image/jpeg'}
-							aria-pressed={outputType === 'image/jpeg'}
-							disabled={isCompressing}
-							onclick={() => (outputType = 'image/jpeg')}
-						>
-							JPEG
-						</button>
+						{#each OUTPUT_TYPES as type}
+							<button
+								type="button"
+								class:selected={outputType === type}
+								aria-pressed={outputType === type}
+								disabled={isCompressing}
+								onclick={() => (outputType = type)}
+							>
+								{labelForOutputType(type)}
+							</button>
+						{/each}
 					</div>
 				</div>
 			</section>

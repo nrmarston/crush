@@ -33,11 +33,27 @@ export function formatDate(value: string): string {
 }
 
 export function extensionForOutputType(outputType: OutputType): string {
-	return outputType === 'image/jpeg' ? 'jpg' : 'webp';
+	if (outputType === 'image/avif') {
+		return 'avif';
+	}
+
+	if (outputType === 'image/jpeg') {
+		return 'jpg';
+	}
+
+	return 'webp';
 }
 
 export function labelForOutputType(outputType: OutputType): string {
-	return outputType === 'image/jpeg' ? 'JPEG' : 'WebP';
+	if (outputType === 'image/avif') {
+		return 'AVIF';
+	}
+
+	if (outputType === 'image/jpeg') {
+		return 'JPEG';
+	}
+
+	return 'WebP';
 }
 
 export function makeOutputName(originalName: string, outputType: OutputType): string {
