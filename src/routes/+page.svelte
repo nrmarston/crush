@@ -711,29 +711,31 @@
 				{/if}
 			</button>
 
-			<div class="queue-head">
-				<div class="file-line">
-					<i class="ph ph-stack file-mark" aria-hidden="true"></i>
-					<span class="file-details">
-						<strong>{items.length ? `${items.length} image${items.length === 1 ? '' : 's'}` : 'No images added'}</strong>
-						<span>{batchStatus}</span>
-					</span>
-					<span class="file-size">{formatBytes(MAX_FILE_SIZE)} max</span>
-				</div>
+			{#if items.length > 0}
+				<div class="queue-head">
+					<div class="file-line">
+						<i class="ph ph-stack file-mark" aria-hidden="true"></i>
+						<span class="file-details">
+							<strong>{`${items.length} image${items.length === 1 ? '' : 's'}`}</strong>
+							<span>{batchStatus}</span>
+						</span>
+						<span class="file-size">{formatBytes(MAX_FILE_SIZE)} max</span>
+					</div>
 
-				<div class="queue-actions">
-					<button
-						type="button"
-						disabled={completedItems.length === 0 || isZipping}
-						onclick={downloadZip}
-					>
-						{isZipping ? 'Preparing ZIP' : 'Download ZIP'}
-					</button>
-					<button type="button" disabled={items.length === 0 || isBusy} onclick={clearQueue}>
-						Clear
-					</button>
+					<div class="queue-actions">
+						<button
+							type="button"
+							disabled={completedItems.length === 0 || isZipping}
+							onclick={downloadZip}
+						>
+							{isZipping ? 'Preparing ZIP' : 'Download ZIP'}
+						</button>
+						<button type="button" disabled={items.length === 0 || isBusy} onclick={clearQueue}>
+							Clear
+						</button>
+					</div>
 				</div>
-			</div>
+			{/if}
 
 			{#if queueError}
 				<p class="notice error">{queueError}</p>
@@ -901,7 +903,7 @@
 	.brand img {
 		display: block;
 		width: 100%;
-		max-width: 100px;
+		max-width: 80px;
 		height: auto;
 	}
 
@@ -1120,7 +1122,7 @@
 		place-items: center;
 		overflow: hidden;
 		border-radius: var(--radius-md);
-		margin-bottom: 18px;
+		margin-bottom: 24px;
 		background: color-mix(in srgb, var(--color-primary) 30%, var(--color-neutral));
 		transition: transform 180ms var(--ease-out);
 		transform-origin: center;
@@ -1153,8 +1155,8 @@
 	.drop-copy {
 		display: block;
 		max-width: 430px;
-		margin-top: 6px;
-		color: var(--color-ink);
+		margin-top: 8px;
+		color: var(--color-muted);
 		font-size: 0.9rem;
 		font-weight: 400;
 		line-height: 1.45;
@@ -1186,6 +1188,7 @@
 		grid-template-columns: minmax(0, 1fr) auto;
 		gap: 14px;
 		align-items: center;
+		opacity: 1;
 	}
 
 	.file-line {
@@ -1544,6 +1547,20 @@
 
 		.settings-popover {
 			animation: popover-in 160ms var(--ease-out) both;
+		}
+
+		.queue-head {
+			transform: translateY(0);
+			transition:
+				opacity 180ms var(--ease-out),
+				transform 180ms var(--ease-out);
+		}
+
+		@starting-style {
+			.queue-head {
+				opacity: 0;
+				transform: translateY(-6px);
+			}
 		}
 
 		@keyframes rise-in {
