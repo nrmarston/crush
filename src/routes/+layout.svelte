@@ -19,7 +19,7 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<meta name="theme-color" content="#f5f0e8" />
+	<meta name="theme-color" content="#f7f7f7" />
 	{@html webManifest}
 </svelte:head>
 
@@ -29,9 +29,23 @@
 	@font-face {
 		font-family: 'Soehne';
 		src: url('/fonts/soehne.woff2') format('woff2');
-		font-weight: 400;
+		font-weight: 400 900;
 		font-style: normal;
 		font-display: swap;
+	}
+
+	:global(:root) {
+		--color-primary: #ff83da;
+		--color-primary-soft: #ffc5ee;
+		--color-ink: #000000;
+		--color-line: #e5e7eb;
+		--color-neutral: #ffffff;
+		--color-surface: #f7f7f7;
+		--color-muted: #5f6368;
+		--color-error: #d92d20;
+		--radius-sm: 4px;
+		--radius-md: 8px;
+		--radius-full: 9999px;
 	}
 
 	:global(*) {
@@ -40,19 +54,22 @@
 
 	:global(html) {
 		color-scheme: light;
-		background: #f5f0e8;
+		background: var(--color-surface);
 	}
 
 	:global(body) {
 		min-width: 320px;
 		margin: 0;
-		background:
-			linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(245, 240, 232, 0.68)),
-			#f5f0e8;
-		color: #17352c;
+		background: var(--color-surface);
+		color: var(--color-ink);
 		font-family:
 			'Soehne', Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
 			sans-serif;
+	}
+
+	:global(::selection) {
+		background: var(--color-primary-soft);
+		color: var(--color-ink);
 	}
 
 	:global(button),
