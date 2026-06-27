@@ -1,1 +1,2 @@
 - update favicon, webclip, etc
+- add cloudflare for automatic builds and deployments
