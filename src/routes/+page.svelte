@@ -4,6 +4,7 @@
 	import { clearHistoryJobs, loadHistoryJobs, saveHistoryJob } from '$lib/db';
 	import { readImageMetadata } from '$lib/image-metadata';
 	import { defaultPresetId, presets } from '$lib/presets';
+	import VisualComparison from '$lib/VisualComparison.svelte';
 	import { createZip } from '$lib/zip';
 	import {
 		calculateSavingsPercent,
@@ -648,24 +649,15 @@
 					<div class="result-list">
 						{#each items as item (item.id)}
 							<article class="result-card {item.status}" class:warning={isLarger(item)}>
-								<div class="preview-grid">
-									<div>
-										<span>Original</span>
-										{#if item.originalUrl}
-											<img src={item.originalUrl} alt={`Original preview for ${item.originalName}`} />
-										{:else}
-											<div class="preview-fallback">No preview</div>
-										{/if}
-									</div>
-									<div>
-										<span>Compressed</span>
-										{#if item.outputUrl}
-											<img src={item.outputUrl} alt={`Compressed preview for ${item.originalName}`} />
-										{:else}
-											<div class="preview-fallback">{statusLabels[item.status]}</div>
-										{/if}
-									</div>
-								</div>
+								<VisualComparison
+									originalUrl={item.originalUrl}
+									outputUrl={item.outputUrl}
+									imageName={item.originalName}
+									status={item.status}
+									statusLabel={statusLabels[item.status]}
+									width={item.width}
+									height={item.height}
+								/>
 
 								<div class="result-body">
 									<div class="result-title">
@@ -1098,52 +1090,13 @@
 
 	.result-card {
 		display: grid;
-		grid-template-columns: 260px minmax(0, 1fr);
+		grid-template-columns: minmax(280px, 42%) minmax(0, 1fr);
 		gap: 18px;
 		padding: 14px;
 	}
 
 	.result-card.warning {
 		border-color: #d99b48;
-	}
-
-	.preview-grid {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 10px;
-	}
-
-	.preview-grid > div {
-		display: grid;
-		gap: 8px;
-		align-content: start;
-	}
-
-	.preview-grid span {
-		color: #62746d;
-		font-size: 0.74rem;
-		font-weight: 800;
-		text-transform: uppercase;
-	}
-
-	.preview-grid img,
-	.preview-fallback {
-		width: 100%;
-		aspect-ratio: 1;
-		border: 1px solid rgba(23, 53, 44, 0.12);
-		border-radius: 6px;
-		background: #edf1eb;
-		object-fit: contain;
-	}
-
-	.preview-fallback {
-		display: grid;
-		place-items: center;
-		padding: 10px;
-		color: #62746d;
-		font-size: 0.82rem;
-		font-weight: 800;
-		text-align: center;
 	}
 
 	.result-body {

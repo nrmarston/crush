@@ -20,9 +20,20 @@ _Avoid_: Failed optimization, skipped compression
 A non-animated image asset with one visual frame.
 _Avoid_: Still image
 
+**Visual Comparison**:
+A result preview that compares original and compressed image appearance at matched display size.
+_Avoid_: Pixel diff, dimension comparison
+
 ## Relationships
 
 - A compression job has exactly one **Output Format**
+- A completed compression result may have one **Visual Comparison**
+- A batch compression job may have many **Visual Comparisons**, one for each completed result
+- A **Visual Comparison** is the primary image preview for a completed compression result
+- A **Visual Comparison** starts with original on the left and compressed on the right
+- A **Visual Comparison** uses the image's aspect ratio rather than a square thumbnail frame
+- A result preview keeps the same frame before and after a **Visual Comparison** becomes available
+- A **Visual Comparison** is about visible quality, not whether output dimensions changed
 - **Lossless PNG Optimization** can be used for any supported input format
 - **Lossless PNG Optimization** is lossless relative to decoded image pixels, not necessarily the original encoded source data
 - **Lossless PNG Optimization** preserves original decoded dimensions and does not use size-changing presets
@@ -46,7 +57,13 @@ _Avoid_: Still image
 > **Domain expert:** "No — Crush is for **Static Image** assets, so animated PNGs should not be silently changed."
 > **Dev:** "If the PNG optimizer errors, should we emit a normal canvas PNG?"
 > **Domain expert:** "No — report the file failure instead of silently weakening **Lossless PNG Optimization**."
+> **Dev:** "Should the before/after slider reveal dimension changes?"
+> **Domain expert:** "No — a **Visual Comparison** compares appearance at matched display size; dimensions stay in the result metrics."
+> **Dev:** "Which side is before?"
+> **Domain expert:** "Original is left, compressed is right, and the comparison opens at an even split."
 
 ## Flagged ambiguities
 
 - "lossless" was resolved to mean preserving decoded image pixels for every supported input format.
+- "before/after comparison" was resolved to mean **Visual Comparison**, not dimension comparison.
+- "comparison slider" can sound single-image-only, but **Visual Comparison** applies per completed result in a batch.
