@@ -493,7 +493,9 @@
 	<header class="topbar">
 		<div>
 			<p class="eyebrow">Local image compressor</p>
-			<h1>Crush</h1>
+			<h1 class="brand-logo">
+				<img src="/crush-logo.svg" alt="Crush" />
+			</h1>
 			<p class="intro">
 				Compress image batches locally, compare output quality, and download AVIF, WebP,
 				JPEG, or PNG files.
@@ -805,12 +807,16 @@
 		margin-top: 0;
 	}
 
-	h1 {
-		margin-bottom: 10px;
-		font-size: clamp(3.25rem, 9vw, 7rem);
-		font-weight: 700;
-		line-height: 0.9;
-		letter-spacing: 0;
+	.brand-logo {
+		margin-bottom: 14px;
+		line-height: 0;
+	}
+
+	.brand-logo img {
+		display: block;
+		width: 100%;
+		max-width: 100px;
+		height: auto;
 	}
 
 	h2 {
@@ -1373,10 +1379,6 @@
 		.button-row,
 		.button-row button {
 			width: 100%;
-		}
-
-		h1 {
-			font-size: clamp(3rem, 18vw, 5.25rem);
 		}
 	}
 </style>

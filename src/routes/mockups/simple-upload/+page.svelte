@@ -600,70 +600,67 @@
 
 <main class="mockup-shell">
 	<header class="topline" aria-label="Mockup navigation">
-		<a class="brand" href="/">
-			<span class="brand-mark" aria-hidden="true">C</span>
-			<span>Crush</span>
-		</a>
-
-		<div class="settings-menu" bind:this={settingsMenu}>
-			<button
-				type="button"
-				class="icon-button"
-				aria-label="Compression settings"
-				aria-expanded={showSettings}
-				onclick={toggleSettings}
-			>
-				<i class="ph ph-sliders-horizontal settings-icon" aria-hidden="true"></i>
-			</button>
-
-			{#if showSettings}
-				<section class="settings-popover" aria-label="Compression settings">
-					<div class="popover-head">
-						<h2>Settings</h2>
-						<p>{labelForOutputType(outputType)} output, {selectedPreset.label.toLowerCase()} preset.</p>
-					</div>
-
-					<div class="setting-block">
-						<h3>Output</h3>
-						<div class="segmented" aria-label="Output format">
-							{#each OUTPUT_TYPES as type}
-								<button
-									type="button"
-									class:selected={outputType === type}
-									aria-pressed={outputType === type}
-									disabled={isBusy}
-									onclick={() => setCompressionOutputType(type)}
-								>
-									{labelForOutputType(type)}
-								</button>
-							{/each}
+		<div class="nav-container">
+			<a class="brand" href="/">
+				<img src="/crush-logo.svg" alt="Crush" />
+			</a>
+			<div class="settings-menu" bind:this={settingsMenu}>
+				<button
+					type="button"
+					class="icon-button"
+					aria-label="Compression settings"
+					aria-expanded={showSettings}
+					onclick={toggleSettings}
+				>
+					<i class="ph ph-sliders-horizontal settings-icon" aria-hidden="true"></i>
+				</button>
+				{#if showSettings}
+					<section class="settings-popover" aria-label="Compression settings">
+						<div class="popover-head">
+							<h2>Settings</h2>
+							<p>{labelForOutputType(outputType)} output, {selectedPreset.label.toLowerCase()} preset.</p>
 						</div>
-					</div>
-
-					<div class="setting-block">
-						<h3>Compression</h3>
-						<div class="preset-list" aria-label="Compression preset">
-							{#each presets as preset}
-								<button
-									type="button"
-									class:selected={presetId === preset.id}
-									aria-pressed={presetId === preset.id}
-									disabled={isBusy || isPngOutput}
-									onclick={() => setCompressionPreset(preset.id)}
-								>
-									<span class="preset-icon" aria-hidden="true">
-										<i class={`ph ${presetIcons[preset.id]}`}></i>
-									</span>
-									<span class="preset-copy">
-										<span>{preset.label}</span>
-										<small>{preset.description}</small>
-									</span>
-								</button>
-							{/each}
+						<div class="setting-block">
+							<h3>Output</h3>
+							<div class="segmented" aria-label="Output format">
+								{#each OUTPUT_TYPES as type}
+									<button
+										type="button"
+										class:selected={outputType === type}
+										aria-pressed={outputType === type}
+										disabled={isBusy}
+										onclick={() => setCompressionOutputType(type)}
+									>
+										{labelForOutputType(type)}
+									</button>
+								{/each}
+							</div>
 						</div>
-					</div>
-				</section>
-			{/if}
+						<div class="setting-block">
+							<h3>Compression</h3>
+							<div class="preset-list" aria-label="Compression preset">
+								{#each presets as preset}
+									<button
+										type="button"
+										class:selected={presetId === preset.id}
+										aria-pressed={presetId === preset.id}
+										disabled={isBusy || isPngOutput}
+										onclick={() => setCompressionPreset(preset.id)}
+									>
+										<span class="preset-icon" aria-hidden="true">
+											<i class={`ph ${presetIcons[preset.id]}`}></i>
+										</span>
+										<span class="preset-copy">
+											<span>{preset.label}</span>
+											<small>{preset.description}</small>
+										</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+					</section>
+				{/if}
+			</div>
 		</div>
 	</header>
 
@@ -863,8 +860,22 @@
 
 		position: relative;
 		display: grid;
+		grid-template-rows: auto minmax(0, 1fr);
 		min-height: 100svh;
-		padding: 30px;
+		padding: 16px;
+	}
+
+	.nav-container {
+		width: 100%;
+		max-width: 120rem;
+		margin-inline: auto;
+		padding-inline: 1rem;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+
+		/* I want the padding inline to  */
 	}
 
 	.topline {
@@ -880,7 +891,6 @@
 	.brand {
 		display: inline-flex;
 		align-items: center;
-		gap: 10px;
 		color: var(--color-ink);
 		font-size: 0.88rem;
 		font-weight: 700;
@@ -888,15 +898,11 @@
 		text-decoration: none;
 	}
 
-	.brand-mark {
-		display: grid;
-		width: 30px;
-		height: 30px;
-		place-items: center;
-		border-radius: var(--radius-full);
-		background: var(--color-ink);
-		color: var(--color-primary);
-		font-size: 0.8rem;
+	.brand img {
+		display: block;
+		width: 100%;
+		max-width: 100px;
+		height: auto;
 	}
 
 	.settings-menu {
@@ -959,7 +965,7 @@
 		align-content: center;
 		justify-items: center;
 		gap: 34px;
-		padding: 28px 0 70px;
+		padding: 28px 1rem 70px 1rem;
 	}
 
 	.intro {
