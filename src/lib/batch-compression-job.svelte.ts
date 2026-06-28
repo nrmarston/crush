@@ -1,14 +1,12 @@
 import { compressImage } from './compress';
-import { formatBytes } from './format';
-import { readImageMetadata } from './image-metadata';
+import { intakeStaticImage } from './image-metadata';
 import { calculateSavingsPercent } from './output-format';
 import {
 	MAX_BATCH_SIZE,
 	MAX_FILE_SIZE,
-	SUPPORTED_INPUT_TYPES,
 	type CompressionPreset,
 	type CompressionResult,
-	type ImageMetadata
+	type StaticImageIntakeResult
 } from './types';
 import { createZip, type ZipEntry } from './zip';
 
@@ -46,7 +44,7 @@ type ProgressTimer = unknown;
 
 export type BatchCompressionJobDependencies = {
 	createId?: () => string;
-	readMetadata?: (file: File) => Promise<ImageMetadata>;
+	intakeStaticImage?: (file: File) => Promise<StaticImageIntakeResult>;
 	compress?: (id: string, file: File, preset: CompressionPreset) => Promise<CompressionResult>;
 	createObjectUrl?: (value: Blob) => string;
 	revokeObjectUrl?: (url: string) => void;
@@ -57,7 +55,7 @@ export type BatchCompressionJobDependencies = {
 
 export function createBatchCompressionJob(dependencies: BatchCompressionJobDependencies = {}) {
 	const createId = dependencies.createId ?? (() => crypto.randomUUID());
-	const readMetadata = dependencies.readMetadata ?? readImageMetadata;
+	const intakeImage = dependencies.intakeStaticImage ?? intakeStaticImage;
 	const compress = dependencies.compress ?? compressImage;
 	const createObjectUrl =
 		dependencies.createObjectUrl ?? ((value: Blob) => URL.createObjectURL(value));
@@ -215,26 +213,18 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 
 	async function prepareQueuedFile(id: string, file: File) {
 		startItemProgress(id, 12, 42);
-
-		if (!SUPPORTED_INPUT_TYPES.includes(file.type as (typeof SUPPORTED_INPUT_TYPES)[number])) {
-			failQueuedFile(id, 'Unsupported file. Add a JPEG, PNG, or WebP image.');
-			return;
-		}
-
-		if (file.size === 0) {
-			failQueuedFile(id, 'This file is empty.');
-			return;
-		}
-
-		if (file.size > MAX_FILE_SIZE) {
-			failQueuedFile(id, `This file is larger than the ${formatBytes(MAX_FILE_SIZE)} limit.`);
-			return;
-		}
-
-		const originalUrl = createObjectUrl(file);
+		let originalUrl = '';
 
 		try {
-			const metadata = await readMetadata(file);
+			const result = await intakeImage(file);
+
+			if (!result.accepted) {
+				failQueuedFile(id, result.failure.message);
+				return;
+			}
+
+			const { metadata } = result;
+			originalUrl = createObjectUrl(file);
 
 			clearItemProgress(id);
 
@@ -254,7 +244,10 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 				originalUrl
 			}));
 		} catch {
-			revokeObjectUrl(originalUrl);
+			if (originalUrl) {
+				revokeObjectUrl(originalUrl);
+			}
+
 			failQueuedFile(id, 'This image could not be read. It may be corrupt or unsupported.');
 		}
 	}

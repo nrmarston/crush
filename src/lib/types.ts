@@ -28,6 +28,28 @@ export type ImageMetadata = {
 	height: number;
 };
 
+export type StaticImageIntakeFailureCode =
+	| 'unsupported-type'
+	| 'empty-file'
+	| 'oversized-file'
+	| 'corrupt-image'
+	| 'animated-png';
+
+export type StaticImageIntakeFailure = {
+	code: StaticImageIntakeFailureCode;
+	message: string;
+};
+
+export type StaticImageIntakeResult =
+	| {
+			accepted: true;
+			metadata: ImageMetadata;
+	  }
+	| {
+			accepted: false;
+			failure: StaticImageIntakeFailure;
+	  };
+
 export type CompressionResult = {
 	id: string;
 	originalName: string;

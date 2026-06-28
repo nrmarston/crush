@@ -3,7 +3,7 @@ import {
 	createBatchCompressionJob,
 	type BatchCompressionJobDependencies
 } from './batch-compression-job.svelte';
-import type { CompressionPreset, CompressionResult, ImageMetadata } from './types';
+import type { CompressionPreset, CompressionResult, StaticImageIntakeResult } from './types';
 
 const preset: CompressionPreset = {
 	id: 'balanced',
@@ -23,13 +23,16 @@ function createHarness(overrides: BatchCompressionJobDependencies = {}, outputSi
 	const createdUrls: string[] = [];
 	const revokedUrls: string[] = [];
 	const outputBlob = new Blob([new Uint8Array(outputSize)], { type: preset.outputType });
-	const readMetadata = vi.fn(async (file: File): Promise<ImageMetadata> => {
+	const intakeStaticImage = vi.fn(async (file: File): Promise<StaticImageIntakeResult> => {
 		return {
-			name: file.name,
-			type: file.type,
-			size: file.size,
-			width: 640,
-			height: 480
+			accepted: true,
+			metadata: {
+				name: file.name,
+				type: file.type,
+				size: file.size,
+				width: 640,
+				height: 480
+			}
 		};
 	});
 	const compress = vi.fn(async (id: string, file: File, compressionPreset: CompressionPreset) => {
@@ -44,7 +47,7 @@ function createHarness(overrides: BatchCompressionJobDependencies = {}, outputSi
 			idIndex += 1;
 			return `item-${idIndex}`;
 		},
-		readMetadata,
+		intakeStaticImage,
 		compress,
 		createObjectUrl: () => {
 			urlIndex += 1;
@@ -69,7 +72,7 @@ function createHarness(overrides: BatchCompressionJobDependencies = {}, outputSi
 
 	return {
 		job: createBatchCompressionJob(dependencies),
-		readMetadata,
+		intakeStaticImage,
 		compress,
 		createZip,
 		createdUrls,
@@ -91,7 +94,7 @@ describe('batch compression job', () => {
 		await harness.job.queueFiles([file], preset);
 		await flushAsyncWork();
 
-		expect(harness.readMetadata).toHaveBeenCalledWith(file);
+		expect(harness.intakeStaticImage).toHaveBeenCalledWith(file);
 		expect(harness.compress).toHaveBeenCalledWith('item-1', file, preset);
 		expect(harness.job.items).toHaveLength(1);
 		expect(harness.job.items[0]).toMatchObject({
@@ -114,6 +117,13 @@ describe('batch compression job', () => {
 	it('fails invalid files before creating previews or worker calls', async () => {
 		const harness = createHarness();
 		const file = imageFile('notes.txt', 'text/plain', 12);
+		harness.intakeStaticImage.mockResolvedValueOnce({
+			accepted: false,
+			failure: {
+				code: 'unsupported-type',
+				message: 'Unsupported file. Add a JPEG, PNG, or WebP image.'
+			}
+		});
 
 		await harness.job.queueFiles([file], preset);
 		await flushAsyncWork();
@@ -124,7 +134,7 @@ describe('batch compression job', () => {
 			progress: 0,
 			error: 'Unsupported file. Add a JPEG, PNG, or WebP image.'
 		});
-		expect(harness.readMetadata).not.toHaveBeenCalled();
+		expect(harness.intakeStaticImage).toHaveBeenCalledWith(file);
 		expect(harness.compress).not.toHaveBeenCalled();
 		expect(harness.createdUrls).toEqual([]);
 		expect(harness.job.failedCount).toBe(1);

@@ -49,11 +49,6 @@ async function optimizePngInput<Image extends LosslessPngImage>(
 	dependencies: LosslessPngOptimizationDependencies<Image>
 ): Promise<LosslessPngOptimizationResult> {
 	const originalBuffer = await file.arrayBuffer();
-
-	if (isAnimatedPng(originalBuffer)) {
-		throw new Error('Animated PNG files are not supported.');
-	}
-
 	const image = await dependencies.decodeImage(file);
 
 	try {
@@ -113,52 +108,4 @@ function createResult(
 		height: image.height,
 		note
 	};
-}
-
-function isAnimatedPng(buffer: ArrayBuffer): boolean {
-	const bytes = new Uint8Array(buffer);
-
-	if (!hasPngSignature(bytes)) {
-		return false;
-	}
-
-	const view = new DataView(buffer);
-	let offset = 8;
-
-	while (offset + 12 <= buffer.byteLength) {
-		const length = view.getUint32(offset);
-		const typeOffset = offset + 4;
-		const type = String.fromCharCode(
-			bytes[typeOffset],
-			bytes[typeOffset + 1],
-			bytes[typeOffset + 2],
-			bytes[typeOffset + 3]
-		);
-
-		if (type === 'acTL') {
-			return true;
-		}
-
-		if (type === 'IDAT') {
-			return false;
-		}
-
-		offset += 12 + length;
-	}
-
-	return false;
-}
-
-function hasPngSignature(bytes: Uint8Array): boolean {
-	return (
-		bytes.length >= 8 &&
-		bytes[0] === 0x89 &&
-		bytes[1] === 0x50 &&
-		bytes[2] === 0x4e &&
-		bytes[3] === 0x47 &&
-		bytes[4] === 0x0d &&
-		bytes[5] === 0x0a &&
-		bytes[6] === 0x1a &&
-		bytes[7] === 0x0a
-	);
 }

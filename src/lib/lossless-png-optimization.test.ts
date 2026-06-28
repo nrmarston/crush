@@ -47,17 +47,6 @@ describe('Lossless PNG Optimization', () => {
 		expect(harness.image.close).toHaveBeenCalledOnce();
 	});
 
-	it('rejects animated PNGs before decoding them as Static Images', async () => {
-		const file = imageFile('spinner.png', 'image/png', animatedPngBytes());
-		const harness = createHarness();
-
-		await expect(optimizeLosslessPng(file, harness.dependencies)).rejects.toThrow(
-			'Animated PNG files are not supported.'
-		);
-		expect(harness.dependencies.decodeImage).not.toHaveBeenCalled();
-		expect(harness.dependencies.optimizePng).not.toHaveBeenCalled();
-	});
-
 	it('fails instead of falling back to unoptimized PNG output when optimization fails', async () => {
 		const file = imageFile('photo.jpg', 'image/jpeg', [1, 2, 3]);
 		const harness = createHarness({
@@ -129,10 +118,6 @@ function blobFromBytes(bytes: number[], type: string) {
 
 function staticPngBytes(data: number[]) {
 	return [...pngSignature(), ...pngChunk('IDAT', data)];
-}
-
-function animatedPngBytes() {
-	return [...pngSignature(), ...pngChunk('acTL', []), ...pngChunk('IDAT', [1])];
 }
 
 function pngSignature() {

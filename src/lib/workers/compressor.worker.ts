@@ -13,6 +13,7 @@ import {
 	optimizeLosslessPng,
 	type LosslessPngOptimizationDependencies
 } from '../lossless-png-optimization';
+import { intakeStaticImage } from '../image-metadata';
 
 const worker = self as DedicatedWorkerGlobalScope;
 const pngOptimizationDependencies = {
@@ -47,6 +48,12 @@ async function compressFile(
 	file: File,
 	preset: CompressionPreset
 ): Promise<CompressionResult> {
+	const intakeResult = await intakeStaticImage(file);
+
+	if (!intakeResult.accepted) {
+		throw new Error(intakeResult.failure.message);
+	}
+
 	if (preset.outputType === 'image/png') {
 		return createPngResult(id, file, preset);
 	}
