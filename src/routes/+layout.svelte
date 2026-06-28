@@ -30,6 +30,7 @@
 
 <SvelteTheme {themes} defaultTheme="system" attribute="data-theme" disableTransitionOnChange>
 	<ThemeColor />
+	<a class="skip-link" href="#main">Skip to main content</a>
 	{@render children()}
 </SvelteTheme>
 
@@ -111,5 +112,29 @@
 	:global(button),
 	:global(a) {
 		-webkit-tap-highlight-color: transparent;
+	}
+
+	:global(.skip-link) {
+		position: fixed;
+		top: 12px;
+		left: 12px;
+		z-index: 1000;
+		border: 1px solid var(--color-ink);
+		border-radius: var(--radius-full);
+		padding: 10px 14px;
+		background: var(--color-neutral);
+		color: var(--color-ink);
+		font-size: 0.85rem;
+		font-weight: 700;
+		line-height: 1.2;
+		text-decoration: none;
+		transform: translateY(calc(-100% - 24px));
+		transition: transform 150ms ease;
+	}
+
+	:global(.skip-link:focus-visible) {
+		outline: 2px solid var(--color-ink);
+		outline-offset: 3px;
+		transform: translateY(0);
 	}
 </style>

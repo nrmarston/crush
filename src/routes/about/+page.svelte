@@ -24,12 +24,14 @@
 	<meta name="twitter:image:alt" content="Crush local image compressor app icon" />
 </svelte:head>
 
-<main class="about-shell">
-	<header class="about-nav" aria-label="Primary navigation">
-		<a class="brand" href="/">
-			<img src="/crush-logo.svg" alt="Crush" />
-		</a>
-		<a class="app-link" href="/">Open app</a>
+<main id="main" class="about-shell" tabindex="-1">
+	<header class="about-nav">
+		<nav class="about-nav-inner" aria-label="Primary">
+			<a class="brand" href="/">
+				<img src="/crush-logo.svg" alt="Crush" />
+			</a>
+			<a class="app-link" href="/">Open app</a>
+		</nav>
 	</header>
 
 	<section class="about-hero" aria-labelledby="about-title">
@@ -111,12 +113,16 @@
 	}
 
 	.about-nav {
+		height: 40px;
+		padding-inline: 1rem;
+	}
+
+	.about-nav-inner {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 16px;
-		height: 40px;
-		padding-inline: 1rem;
+		height: 100%;
 	}
 
 	.brand {

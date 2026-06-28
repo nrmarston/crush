@@ -52,6 +52,7 @@
 
 	let fileInput = $state<HTMLInputElement>();
 	let fileList = $state<HTMLElement>();
+	let settingsButton = $state<HTMLButtonElement>();
 	let settingsMenu = $state<HTMLElement>();
 	let isDragging = $state(false);
 	let showSettings = $state(false);
@@ -81,10 +82,36 @@
 		batchJob.dispose();
 	});
 
-	function handleWindowKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape') {
-			showSettings = false;
+	function progressText(progress: number) {
+		return `${Math.round(progress)}% complete`;
+	}
+
+	function closeSettings({ restoreFocus = false }: { restoreFocus?: boolean } = {}) {
+		if (!showSettings) {
+			return;
 		}
+
+		showSettings = false;
+
+		if (restoreFocus) {
+			void tick().then(() => settingsButton?.focus());
+		}
+	}
+
+	function handleWindowKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || !showSettings) {
+			return;
+		}
+
+		const activeElement = document.activeElement;
+		const shouldRestoreFocus =
+			activeElement instanceof Node && settingsMenu?.contains(activeElement);
+
+		if (shouldRestoreFocus) {
+			event.preventDefault();
+		}
+
+		closeSettings({ restoreFocus: shouldRestoreFocus });
 	}
 
 	function handleWindowClick(event: MouseEvent) {
@@ -92,7 +119,7 @@
 			return;
 		}
 
-		showSettings = false;
+		closeSettings();
 	}
 
 	function updateFileListEdges() {
@@ -205,9 +232,9 @@
 	onresize={updateFileListEdges}
 />
 
-<main class="app-shell">
-	<header class="topline" aria-label="Primary navigation">
-		<div class="nav-container">
+<main id="main" class="app-shell" tabindex="-1">
+	<header class="topline">
+		<nav class="nav-container" aria-label="Primary">
 			<a class="brand" href="/">
 				<img src="/crush-logo.svg" alt="Crush" />
 			</a>
@@ -215,16 +242,22 @@
 				<a class="nav-link" href="/about">About</a>
 				<div class="settings-menu" bind:this={settingsMenu}>
 					<button
+						bind:this={settingsButton}
 						type="button"
 						class="icon-button"
 						aria-label="Compression settings"
+						aria-controls="compression-settings"
 						aria-expanded={showSettings}
 						onclick={toggleSettings}
 					>
 						<i class="ph ph-sliders-horizontal settings-icon" aria-hidden="true"></i>
 					</button>
 					{#if showSettings}
-						<section class="settings-popover" aria-label="Compression settings">
+						<section
+							id="compression-settings"
+							class="settings-popover"
+							aria-label="Compression settings"
+						>
 							<div class="popover-head">
 								<h2>Settings</h2>
 								<p>
@@ -278,7 +311,7 @@
 					{/if}
 				</div>
 			</div>
-		</div>
+		</nav>
 	</header>
 
 	<section class={['stage', { active: workspace.hasItems }]} aria-labelledby="app-title">
@@ -299,40 +332,51 @@
 					onchange={handleInputChange}
 				/>
 
-				<button
-					type="button"
-					class={[
-						'drop-zone',
-						{
-							dragging: isDragging,
-							busy: workspace.intake.showProgress,
-							complete: workspace.intake.isComplete,
-							failed: workspace.intake.isFailed,
-							compact: workspace.intake.isCompact
-						}
-					]}
-					aria-busy={workspace.isBusy}
-					onclick={openFileBrowser}
-					ondragenter={handleDragEnter}
-					ondragover={handleDragOver}
-					ondragleave={handleDragLeave}
-					ondrop={handleDrop}
-				>
-					<span class="drop-media" aria-hidden="true">
-						{#if workspace.intake.thumbnailUrl}
-							<img src={workspace.intake.thumbnailUrl} alt="" />
-						{:else}
-							<i class="ph ph-images-square drop-icon"></i>
-						{/if}
-					</span>
-					<span class="drop-title">{workspace.intake.title}</span>
-					<span class="drop-copy">{workspace.intake.copy}</span>
+				<div class="drop-zone-frame">
+					<button
+						type="button"
+						class={[
+							'drop-zone',
+							{
+								dragging: isDragging,
+								busy: workspace.intake.showProgress,
+								complete: workspace.intake.isComplete,
+								failed: workspace.intake.isFailed,
+								compact: workspace.intake.isCompact
+							}
+						]}
+						aria-busy={workspace.isBusy}
+						onclick={openFileBrowser}
+						ondragenter={handleDragEnter}
+						ondragover={handleDragOver}
+						ondragleave={handleDragLeave}
+						ondrop={handleDrop}
+					>
+						<span class="drop-media" aria-hidden="true">
+							{#if workspace.intake.thumbnailUrl}
+								<img src={workspace.intake.thumbnailUrl} alt="" />
+							{:else}
+								<i class="ph ph-images-square drop-icon"></i>
+							{/if}
+						</span>
+						<span class="drop-title">{workspace.intake.title}</span>
+						<span class="drop-copy">{workspace.intake.copy}</span>
+					</button>
+
 					{#if workspace.intake.showProgress}
-						<span class="progress-track" aria-hidden="true">
-							<span style:width={`${workspace.intake.progress}%`}></span>
+						<span
+							class={['progress-track', { compact: workspace.intake.isCompact }]}
+							role="progressbar"
+							aria-label="Overall compression progress"
+							aria-valuemin="0"
+							aria-valuemax="100"
+							aria-valuenow={workspace.intake.progress}
+							aria-valuetext={progressText(workspace.intake.progress)}
+						>
+							<span aria-hidden="true" style:width={`${workspace.intake.progress}%`}></span>
 						</span>
 					{/if}
-				</button>
+				</div>
 
 				{#if workspace.hasItems}
 					<div class="queue-head">
@@ -365,7 +409,7 @@
 				{/if}
 
 				{#each workspace.notices as notice (notice.id)}
-					<p class={`notice ${notice.tone}`}>{notice.message}</p>
+					<p class={`notice ${notice.tone}`} role="alert">{notice.message}</p>
 				{/each}
 
 				{#if workspace.metrics.length > 0}
@@ -434,8 +478,16 @@
 									<span class="row-meta">{row.details}</span>
 
 									{#if row.showProgress}
-										<span class="row-progress" aria-label={row.progressLabel}>
-											<span style:width={`${row.progress}%`}></span>
+										<span
+											class="row-progress"
+											role="progressbar"
+											aria-label={row.progressLabel}
+											aria-valuemin="0"
+											aria-valuemax="100"
+											aria-valuenow={row.progress}
+											aria-valuetext={progressText(row.progress)}
+										>
+											<span aria-hidden="true" style:width={`${row.progress}%`}></span>
 										</span>
 									{/if}
 
@@ -639,15 +691,17 @@
 
 	.workspace {
 		display: grid;
-		width: min(760px, 100%);
+		inline-size: 100%;
 		gap: 22px;
 		align-items: start;
+		justify-items: center;
 	}
 
 	.workspace.active {
-		width: min(120rem, 100%);
-		grid-template-columns: minmax(360px, 760px) minmax(360px, 1fr);
+		max-inline-size: 120rem;
+		grid-template-columns: minmax(0, min(48rem, 90vw)) minmax(0, 1fr);
 		gap: 24px;
+		justify-items: stretch;
 	}
 
 	.intro {
@@ -745,7 +799,8 @@
 
 	.flow-card {
 		display: grid;
-		width: 100%;
+		inline-size: 100%;
+		max-inline-size: min(48rem, 90vw);
 		gap: 18px;
 		border-radius: var(--radius-md);
 		padding: 28px;
@@ -761,10 +816,18 @@
 		pointer-events: none;
 	}
 
+	.drop-zone-frame {
+		position: relative;
+		display: grid;
+		inline-size: 100%;
+	}
+
 	.drop-zone {
 		position: relative;
 		display: grid;
+		align-content: center;
 		justify-items: center;
+		inline-size: 100%;
 		min-height: 220px;
 		overflow: hidden;
 		border: 1px dashed var(--color-line);
@@ -887,9 +950,10 @@
 		overflow: hidden;
 		border-radius: var(--radius-full);
 		background: var(--color-line);
+		pointer-events: none;
 	}
 
-	.drop-zone.compact .progress-track {
+	.progress-track.compact {
 		right: 16px;
 		bottom: 16px;
 		left: 16px;
@@ -1371,7 +1435,6 @@
 
 	@media (max-width: 1180px) {
 		.workspace.active {
-			width: min(760px, 100%);
 			grid-template-columns: 1fr;
 		}
 	}
