@@ -12,7 +12,37 @@
 	import CompressionStatusBadge from '$lib/CompressionStatusBadge.svelte';
 	import FocusedResultPreview from '$lib/FocusedResultPreview.svelte';
 	import ThemeToggle from '$lib/ThemeToggle.svelte';
+	import { homeUrl, jsonLdScript, socialImageUrl } from '$lib/seo';
 	import type { CompressionPreset, PresetId } from '$lib/types';
+
+	const seoTitle = 'Local Image Compressor - No Upload Required | Crush';
+	const seoDescription =
+		'Compress JPEG, PNG, and WebP into AVIF, WebP, JPEG, or lossless PNG locally in your browser. Batch process images with no upload required.';
+	const softwareApplicationMarkup = jsonLdScript({
+		'@context': 'https://schema.org',
+		'@type': 'SoftwareApplication',
+		name: 'Crush',
+		description: seoDescription,
+		url: homeUrl,
+		applicationCategory: 'MultimediaApplication',
+		applicationSubCategory: 'Image compression',
+		operatingSystem: 'Any',
+		browserRequirements: 'Requires a modern browser with Web Worker and Canvas support.',
+		isAccessibleForFree: true,
+		offers: {
+			'@type': 'Offer',
+			price: '0',
+			priceCurrency: 'USD'
+		},
+		featureList: [
+			'Local image compression without uploads',
+			'Batch image compression and ZIP downloads',
+			'JPEG, PNG, and WebP input support',
+			'AVIF, WebP, JPEG, and lossless PNG output support',
+			'Offline-ready browser app after the first load'
+		],
+		fileFormat: ['image/jpeg', 'image/png', 'image/webp', 'image/avif']
+	});
 
 	const presetIcons: Record<PresetId, string> = {
 		quality: 'ph-sparkle',
@@ -152,11 +182,21 @@
 </script>
 
 <svelte:head>
-	<title>Crush - Local Image Compression</title>
-	<meta
-		name="description"
-		content="Compress JPEG, PNG, and WebP images locally with drag-and-drop, per-file progress, and batch download state."
-	/>
+	<title>{seoTitle}</title>
+	<meta name="description" content={seoDescription} />
+	<link rel="canonical" href={homeUrl} />
+	<meta property="og:title" content={seoTitle} />
+	<meta property="og:description" content={seoDescription} />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content={homeUrl} />
+	<meta property="og:image" content={socialImageUrl} />
+	<meta property="og:image:alt" content="Crush local image compressor app icon" />
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content={seoTitle} />
+	<meta name="twitter:description" content={seoDescription} />
+	<meta name="twitter:image" content={socialImageUrl} />
+	<meta name="twitter:image:alt" content="Crush local image compressor app icon" />
+	{@html softwareApplicationMarkup}
 </svelte:head>
 
 <svelte:window
@@ -171,77 +211,80 @@
 			<a class="brand" href="/">
 				<img src="/crush-logo.svg" alt="Crush" />
 			</a>
-			<div class="settings-menu" bind:this={settingsMenu}>
-				<button
-					type="button"
-					class="icon-button"
-					aria-label="Compression settings"
-					aria-expanded={showSettings}
-					onclick={toggleSettings}
-				>
-					<i class="ph ph-sliders-horizontal settings-icon" aria-hidden="true"></i>
-				</button>
-				{#if showSettings}
-					<section class="settings-popover" aria-label="Compression settings">
-						<div class="popover-head">
-							<h2>Settings</h2>
-							<p>
-								{compressionPlan.outputFormat.label} output, {selectedPreset.label.toLowerCase()}
-								preset.
-							</p>
-						</div>
-						<div class="setting-block">
-							<h3>Appearance</h3>
-							<ThemeToggle />
-						</div>
-						<div class="setting-block">
-							<h3>Output</h3>
-							<div class="segmented" aria-label="Output format">
-								{#each OUTPUT_FORMATS as format (format.type)}
-									<button
-										type="button"
-										class={{ selected: outputType === format.type }}
-										aria-pressed={outputType === format.type}
-										disabled={workspace.isBusy}
-										onclick={() => setCompressionOutputType(format.type)}
-									>
-										{format.label}
-									</button>
-								{/each}
+			<div class="nav-actions">
+				<a class="nav-link" href="/about">About</a>
+				<div class="settings-menu" bind:this={settingsMenu}>
+					<button
+						type="button"
+						class="icon-button"
+						aria-label="Compression settings"
+						aria-expanded={showSettings}
+						onclick={toggleSettings}
+					>
+						<i class="ph ph-sliders-horizontal settings-icon" aria-hidden="true"></i>
+					</button>
+					{#if showSettings}
+						<section class="settings-popover" aria-label="Compression settings">
+							<div class="popover-head">
+								<h2>Settings</h2>
+								<p>
+									{compressionPlan.outputFormat.label} output, {selectedPreset.label.toLowerCase()}
+									preset.
+								</p>
 							</div>
-						</div>
-						<div class="setting-block">
-							<h3>Compression</h3>
-							<div class="preset-list" aria-label="Compression preset">
-								{#each presets as preset (preset.id)}
-									<button
-										type="button"
-										class={{ selected: presetId === preset.id }}
-										aria-pressed={presetId === preset.id}
-										disabled={workspace.isBusy || !arePresetsEnabled}
-										onclick={() => setCompressionPreset(preset.id)}
-									>
-										<span class="preset-icon" aria-hidden="true">
-											<i class={`ph ${presetIcons[preset.id]}`}></i>
-										</span>
-										<span class="preset-copy">
-											<span>{preset.label}</span>
-											<small>{preset.description}</small>
-										</span>
-									</button>
-								{/each}
+							<div class="setting-block">
+								<h3>Appearance</h3>
+								<ThemeToggle />
 							</div>
-						</div>
-					</section>
-				{/if}
+							<div class="setting-block">
+								<h3>Output</h3>
+								<div class="segmented" aria-label="Output format">
+									{#each OUTPUT_FORMATS as format (format.type)}
+										<button
+											type="button"
+											class={{ selected: outputType === format.type }}
+											aria-pressed={outputType === format.type}
+											disabled={workspace.isBusy}
+											onclick={() => setCompressionOutputType(format.type)}
+										>
+											{format.label}
+										</button>
+									{/each}
+								</div>
+							</div>
+							<div class="setting-block">
+								<h3>Compression</h3>
+								<div class="preset-list" aria-label="Compression preset">
+									{#each presets as preset (preset.id)}
+										<button
+											type="button"
+											class={{ selected: presetId === preset.id }}
+											aria-pressed={presetId === preset.id}
+											disabled={workspace.isBusy || !arePresetsEnabled}
+											onclick={() => setCompressionPreset(preset.id)}
+										>
+											<span class="preset-icon" aria-hidden="true">
+												<i class={`ph ${presetIcons[preset.id]}`}></i>
+											</span>
+											<span class="preset-copy">
+												<span>{preset.label}</span>
+												<small>{preset.description}</small>
+											</span>
+										</button>
+									{/each}
+								</div>
+							</div>
+						</section>
+					{/if}
+				</div>
 			</div>
 		</div>
 	</header>
 
 	<section class={['stage', { active: workspace.hasItems }]} aria-labelledby="app-title">
 		<div class="intro">
-			<h1 id="app-title">Compress images</h1>
-			<p>Big images in. Small files out.</p>
+			<h1 id="app-title">Local image compressor</h1>
+			<p>Compress images privately in your browser. No uploads.</p>
 		</div>
 
 		<div class={['workspace', { active: workspace.hasItems }]}>
@@ -486,6 +529,25 @@
 		filter: var(--brand-logo-filter);
 	}
 
+	.nav-actions {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.nav-link {
+		color: var(--color-muted);
+		font-size: 0.82rem;
+		font-weight: 700;
+		line-height: 1.35;
+		text-decoration: none;
+	}
+
+	.nav-link:focus-visible {
+		outline: 2px solid var(--color-ink);
+		outline-offset: 3px;
+	}
+
 	.settings-menu {
 		position: relative;
 	}
@@ -636,6 +698,7 @@
 	}
 
 	.intro p {
+		max-width: 560px;
 		color: var(--color-muted);
 	}
 
@@ -1268,6 +1331,10 @@
 		.row-download:hover {
 			background: var(--color-primary-soft);
 			transform: translateY(-1px);
+		}
+
+		.nav-link:hover {
+			color: var(--color-ink);
 		}
 
 		.settings-popover button:hover:not(:disabled) {

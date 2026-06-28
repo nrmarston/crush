@@ -44,6 +44,7 @@ export default defineConfig({
 		}),
 		SvelteKitPWA({
 			registerType: 'autoUpdate',
+			manifestFilename: 'site.webmanifest',
 			includeAssets: ['robots.txt', 'crush-icon.svg'],
 			manifest: {
 				name: 'Crush',
@@ -54,6 +55,7 @@ export default defineConfig({
 				display: 'standalone',
 				scope: '/',
 				start_url: '/',
+				lang: 'en',
 				icons: [
 					{
 						src: '/crush-icon.svg',
