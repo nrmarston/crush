@@ -3,6 +3,7 @@ import {
 	createFocusedResultPreviewFrame,
 	type FocusedResultPreviewFrame
 } from './focused-result-preview';
+import { formatBytes, formatSavings } from './format';
 import { intakeStaticImage } from './image-metadata';
 import { calculateSavingsPercent, labelForImageType, labelForOutputType } from './output-format';
 import {
@@ -68,6 +69,54 @@ export type BatchCompressionJobPreview = {
 	download?: BatchCompressionJobDownload;
 };
 
+export type BatchWorkspaceReadOptions = {
+	isDragging?: boolean;
+};
+
+export type BatchWorkspaceIntake = {
+	title: string;
+	copy: string;
+	thumbnailUrl?: string;
+	progress: number;
+	showProgress: boolean;
+	isCompact: boolean;
+	isComplete: boolean;
+	isFailed: boolean;
+};
+
+export type BatchWorkspaceSummary = {
+	itemCount: number;
+	title: string;
+	status: string;
+	fileSizeLimit: string;
+	canDownloadZip: boolean;
+	downloadZipLabel: string;
+	canClear: boolean;
+	clearLabel: string;
+};
+
+export type BatchWorkspaceMetric = {
+	label: string;
+	value: string;
+};
+
+export type BatchWorkspaceNotice = {
+	tone: 'error';
+	message: string;
+};
+
+export type BatchWorkspaceReadModel = {
+	hasItems: boolean;
+	isBusy: boolean;
+	isZipping: boolean;
+	intake: BatchWorkspaceIntake;
+	summary: BatchWorkspaceSummary;
+	rows: BatchCompressionJobRow[];
+	metrics: BatchWorkspaceMetric[];
+	notices: BatchWorkspaceNotice[];
+	preview?: BatchCompressionJobPreview;
+};
+
 export type BatchCompressionJobItem = {
 	id: string;
 	file?: File;
@@ -102,9 +151,12 @@ export type BatchCompressionJobDependencies = {
 	createObjectUrl?: (value: Blob) => string;
 	revokeObjectUrl?: (url: string) => void;
 	createZip?: (entries: ZipEntry[]) => Promise<Blob>;
+	downloadBlob?: (blob: Blob, fileName: string) => void;
 	setProgressInterval?: (callback: () => void, milliseconds: number) => ProgressTimer;
 	clearProgressInterval?: (timer: ProgressTimer) => void;
 };
+
+const RESULT_ZIP_NAME = 'crush-results.zip';
 
 export function createBatchCompressionJob(dependencies: BatchCompressionJobDependencies = {}) {
 	const createId = dependencies.createId ?? (() => crypto.randomUUID());
@@ -115,6 +167,21 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 	const revokeObjectUrl =
 		dependencies.revokeObjectUrl ?? ((url: string) => URL.revokeObjectURL(url));
 	const zipResults = dependencies.createZip ?? createZip;
+	const downloadBlob =
+		dependencies.downloadBlob ??
+		((blob: Blob, fileName: string) => {
+			const url = createObjectUrl(blob);
+			const anchor = document.createElement('a');
+
+			anchor.href = url;
+			anchor.download = fileName;
+			anchor.rel = 'noopener';
+			document.body.append(anchor);
+			anchor.click();
+			anchor.remove();
+
+			window.setTimeout(() => revokeObjectUrl(url), 1000);
+		});
 	const setProgressInterval =
 		dependencies.setProgressInterval ??
 		((callback: () => void, milliseconds: number) => window.setInterval(callback, milliseconds));
@@ -160,6 +227,7 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 	);
 	const previewItem = $derived(focusedItem ?? featuredItem);
 	const preview = $derived(previewItem ? createBatchCompressionJobPreview(previewItem) : undefined);
+	const workspace = $derived(workspaceFor());
 
 	async function queueFiles(fileList: FileList | File[], preset: CompressionPreset) {
 		if (isDisposed) {
@@ -221,6 +289,18 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		}
 	}
 
+	async function downloadResultZip(): Promise<boolean> {
+		const zip = await createResultZip();
+
+		if (!zip) {
+			return false;
+		}
+
+		downloadBlob(zip, RESULT_ZIP_NAME);
+
+		return true;
+	}
+
 	function removeItem(id: string): boolean {
 		const item = items.find((candidate) => candidate.id === id);
 
@@ -277,6 +357,27 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		isFocusedResultManual = true;
 
 		return true;
+	}
+
+	function workspaceFor(options: BatchWorkspaceReadOptions = {}): BatchWorkspaceReadModel {
+		return createBatchWorkspaceReadModel({
+			isDragging: options.isDragging ?? false,
+			items,
+			rows,
+			preview,
+			featuredItem,
+			completedCount: completedItems.length,
+			failedCount,
+			isBusy,
+			isZipping,
+			queueError,
+			zipError,
+			remainingSlots,
+			totalOriginalSize,
+			totalOutputSize,
+			totalSavingsPercent,
+			compressedBytes
+		});
 	}
 
 	function createQueuedItem(file: File, preset: CompressionPreset): BatchCompressionJobItem {
@@ -518,6 +619,10 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		get preview() {
 			return preview;
 		},
+		get workspace() {
+			return workspace;
+		},
+		workspaceFor,
 		get failedCount() {
 			return failedCount;
 		},
@@ -558,11 +663,185 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		maxFileSize: MAX_FILE_SIZE,
 		queueFiles,
 		createResultZip,
+		downloadResultZip,
 		focusItem,
 		removeItem,
 		clear,
 		dispose
 	};
+}
+
+type BatchWorkspaceReadModelInput = {
+	isDragging: boolean;
+	items: BatchCompressionJobItem[];
+	rows: BatchCompressionJobRow[];
+	preview?: BatchCompressionJobPreview;
+	featuredItem?: BatchCompressionJobItem;
+	completedCount: number;
+	failedCount: number;
+	isBusy: boolean;
+	isZipping: boolean;
+	queueError: string;
+	zipError: string;
+	remainingSlots: number;
+	totalOriginalSize: number;
+	totalOutputSize: number;
+	totalSavingsPercent: number;
+	compressedBytes: number;
+};
+
+function createBatchWorkspaceReadModel(
+	input: BatchWorkspaceReadModelInput
+): BatchWorkspaceReadModel {
+	const itemCount = input.items.length;
+	const featuredRow = input.featuredItem
+		? input.rows.find((row) => row.id === input.featuredItem?.id)
+		: undefined;
+
+	return {
+		hasItems: itemCount > 0,
+		isBusy: input.isBusy,
+		isZipping: input.isZipping,
+		intake: createBatchWorkspaceIntake(input, featuredRow),
+		summary: createBatchWorkspaceSummary(input, itemCount),
+		rows: input.rows,
+		metrics: createBatchWorkspaceMetrics(input),
+		notices: createBatchWorkspaceNotices(input),
+		preview: input.preview
+	};
+}
+
+function createBatchWorkspaceIntake(
+	input: BatchWorkspaceReadModelInput,
+	featuredRow: BatchCompressionJobRow | undefined
+): BatchWorkspaceIntake {
+	const itemCount = input.items.length;
+
+	return {
+		title: titleForBatchWorkspaceIntake(input, itemCount),
+		copy: copyForBatchWorkspaceIntake(input, featuredRow, itemCount),
+		thumbnailUrl: input.featuredItem?.originalUrl,
+		progress: input.featuredItem?.progress ?? 0,
+		showProgress: input.isBusy,
+		isCompact: itemCount > 0,
+		isComplete: input.completedCount > 0 && !input.isBusy,
+		isFailed: itemCount > 0 && input.failedCount === itemCount
+	};
+}
+
+function titleForBatchWorkspaceIntake(
+	input: BatchWorkspaceReadModelInput,
+	itemCount: number
+): string {
+	if (input.isDragging) {
+		return 'Release to compress';
+	}
+
+	if (input.isBusy) {
+		return 'Compression in progress';
+	}
+
+	if (input.completedCount > 0) {
+		return 'Add more images';
+	}
+
+	if (itemCount > 0) {
+		return 'Review image list';
+	}
+
+	return 'Drag images here';
+}
+
+function copyForBatchWorkspaceIntake(
+	input: BatchWorkspaceReadModelInput,
+	featuredRow: BatchCompressionJobRow | undefined,
+	itemCount: number
+): string {
+	if (input.isDragging) {
+		return `Add up to ${input.remainingSlots} more image${input.remainingSlots === 1 ? '' : 's'}.`;
+	}
+
+	if (input.isBusy && featuredRow) {
+		return `${featuredRow.statusLabel} ${featuredRow.title}.`;
+	}
+
+	if (input.remainingSlots === 0) {
+		return `Batch limit reached: ${MAX_BATCH_SIZE} images.`;
+	}
+
+	if (itemCount > 0) {
+		return `${input.completedCount} complete, ${input.failedCount} failed, ${input.remainingSlots} slots open.`;
+	}
+
+	return `Click to choose or drop JPEG, PNG, or WebP files. ${formatBytes(MAX_FILE_SIZE)} each.`;
+}
+
+function createBatchWorkspaceSummary(
+	input: BatchWorkspaceReadModelInput,
+	itemCount: number
+): BatchWorkspaceSummary {
+	return {
+		itemCount,
+		title: `${itemCount} image${itemCount === 1 ? '' : 's'}`,
+		status:
+			itemCount === 0
+				? `${MAX_BATCH_SIZE} image batch limit`
+				: `${input.completedCount} complete / ${itemCount} total`,
+		fileSizeLimit: `${formatBytes(MAX_FILE_SIZE)} max`,
+		canDownloadZip: input.completedCount > 0 && !input.isZipping,
+		downloadZipLabel: input.isZipping ? 'Preparing ZIP' : 'Download ZIP',
+		canClear: itemCount > 0 && !input.isBusy,
+		clearLabel: 'Clear'
+	};
+}
+
+function createBatchWorkspaceMetrics(input: BatchWorkspaceReadModelInput): BatchWorkspaceMetric[] {
+	if (input.completedCount === 0) {
+		return [];
+	}
+
+	return [
+		{
+			label: 'Files',
+			value: String(input.completedCount)
+		},
+		{
+			label: 'Before',
+			value: formatBytes(input.totalOriginalSize)
+		},
+		{
+			label: 'After',
+			value: formatBytes(input.totalOutputSize)
+		},
+		{
+			label: 'Savings',
+			value: formatSavings(input.totalSavingsPercent)
+		},
+		{
+			label: 'Compressed',
+			value: formatBytes(input.compressedBytes)
+		}
+	];
+}
+
+function createBatchWorkspaceNotices(input: BatchWorkspaceReadModelInput): BatchWorkspaceNotice[] {
+	const notices: BatchWorkspaceNotice[] = [];
+
+	if (input.queueError) {
+		notices.push({
+			tone: 'error',
+			message: input.queueError
+		});
+	}
+
+	if (input.zipError) {
+		notices.push({
+			tone: 'error',
+			message: input.zipError
+		});
+	}
+
+	return notices;
 }
 
 function createBatchCompressionJobRow(

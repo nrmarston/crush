@@ -22,6 +22,7 @@ function createHarness(overrides: BatchCompressionJobDependencies = {}, outputSi
 	const progressTimers = new Map<number, () => void>();
 	const createdUrls: string[] = [];
 	const revokedUrls: string[] = [];
+	const downloadedFiles: { blob: Blob; name: string }[] = [];
 	const outputBlob = new Blob([new Uint8Array(outputSize)], { type: preset.outputType });
 	const intakeStaticImage = vi.fn(async (file: File): Promise<StaticImageIntakeResult> => {
 		return {
@@ -59,6 +60,9 @@ function createHarness(overrides: BatchCompressionJobDependencies = {}, outputSi
 			revokedUrls.push(url);
 		},
 		createZip,
+		downloadBlob: (blob, name) => {
+			downloadedFiles.push({ blob, name });
+		},
 		setProgressInterval: (callback) => {
 			timerIndex += 1;
 			progressTimers.set(timerIndex, callback);
@@ -77,6 +81,7 @@ function createHarness(overrides: BatchCompressionJobDependencies = {}, outputSi
 		createZip,
 		createdUrls,
 		revokedUrls,
+		downloadedFiles,
 		progressTimers,
 		runProgressTimers: () => {
 			for (const callback of progressTimers.values()) {
@@ -138,6 +143,98 @@ describe('batch compression job', () => {
 		expect(harness.job.totalSavingsPercent).toBe(60);
 		expect(harness.job.compressedBytes).toBe(600);
 		expect(harness.job.isBusy).toBe(false);
+	});
+
+	it('exposes Batch Workspace display facts through one read model', async () => {
+		const harness = createHarness();
+		const file = imageFile('hero.jpg', 'image/jpeg', 1000);
+
+		expect(harness.job.workspaceFor()).toMatchObject({
+			hasItems: false,
+			isBusy: false,
+			intake: {
+				title: 'Drag images here',
+				copy: 'Click to choose or drop JPEG, PNG, or WebP files. 25 MB each.',
+				progress: 0,
+				showProgress: false,
+				isCompact: false,
+				isComplete: false,
+				isFailed: false
+			},
+			summary: {
+				itemCount: 0,
+				title: '0 images',
+				status: '25 image batch limit',
+				fileSizeLimit: '25 MB max',
+				canDownloadZip: false,
+				downloadZipLabel: 'Download ZIP',
+				canClear: false,
+				clearLabel: 'Clear'
+			},
+			metrics: [],
+			notices: []
+		});
+		expect(harness.job.workspaceFor({ isDragging: true }).intake).toMatchObject({
+			title: 'Release to compress',
+			copy: 'Add up to 25 more images.'
+		});
+
+		await harness.job.queueFiles([file], preset);
+		await flushAsyncWork();
+
+		expect(harness.job.workspaceFor()).toMatchObject({
+			hasItems: true,
+			isBusy: false,
+			intake: {
+				title: 'Add more images',
+				copy: '1 complete, 0 failed, 24 slots open.',
+				thumbnailUrl: 'blob:fake-1',
+				progress: 100,
+				showProgress: false,
+				isCompact: true,
+				isComplete: true,
+				isFailed: false
+			},
+			summary: {
+				itemCount: 1,
+				title: '1 image',
+				status: '1 complete / 1 total',
+				fileSizeLimit: '25 MB max',
+				canDownloadZip: true,
+				downloadZipLabel: 'Download ZIP',
+				canClear: true,
+				clearLabel: 'Clear'
+			},
+			metrics: [
+				{
+					label: 'Files',
+					value: '1'
+				},
+				{
+					label: 'Before',
+					value: '1000 B'
+				},
+				{
+					label: 'After',
+					value: '400 B'
+				},
+				{
+					label: 'Savings',
+					value: '60%'
+				},
+				{
+					label: 'Compressed',
+					value: '600 B'
+				}
+			],
+			preview: {
+				id: 'item-1'
+			}
+		});
+		expect(harness.job.workspaceFor({ isDragging: true }).intake).toMatchObject({
+			title: 'Release to compress',
+			copy: 'Add up to 24 more images.'
+		});
 	});
 
 	it('follows the latest completed result until the user chooses one', async () => {
@@ -354,6 +451,19 @@ describe('batch compression job', () => {
 			{
 				name: 'hero-crushed.webp',
 				blob: harness.job.completedItems[0].result.outputBlob
+			}
+		]);
+
+		const downloadHarness = createHarness();
+
+		await downloadHarness.job.queueFiles([file], preset);
+		await flushAsyncWork();
+
+		await expect(downloadHarness.job.downloadResultZip()).resolves.toBe(true);
+		expect(downloadHarness.downloadedFiles).toEqual([
+			{
+				blob: expect.any(Blob),
+				name: 'crush-results.zip'
 			}
 		]);
 

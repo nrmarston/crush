@@ -7,7 +7,6 @@
 		setCompressionPreset
 	} from '$lib/compression-settings.svelte';
 	import { createBatchCompressionJob } from '$lib/batch-compression-job.svelte';
-	import { formatBytes, formatSavings } from '$lib/format';
 	import { OUTPUT_FORMATS, createCompressionPlan } from '$lib/output-format';
 	import { presets } from '$lib/presets';
 	import CompressionStatusBadge from '$lib/CompressionStatusBadge.svelte';
@@ -42,54 +41,7 @@
 	const activePreset = $derived<CompressionPreset>(
 		compressionPlan.compressionPreset
 	);
-	const items = $derived(batchJob.items);
-	const rows = $derived(batchJob.rows);
-	const completedItems = $derived(batchJob.completedItems);
-	const preview = $derived(batchJob.preview);
-	const failedCount = $derived(batchJob.failedCount);
-	const isBusy = $derived(batchJob.isBusy);
-	const isZipping = $derived(batchJob.isZipping);
-	const queueError = $derived(batchJob.queueError);
-	const zipError = $derived(batchJob.zipError);
-	const remainingSlots = $derived(batchJob.remainingSlots);
-	const totalOriginalSize = $derived(batchJob.totalOriginalSize);
-	const totalOutputSize = $derived(batchJob.totalOutputSize);
-	const totalSavingsPercent = $derived(batchJob.totalSavingsPercent);
-	const compressedBytes = $derived(batchJob.compressedBytes);
-	const featuredItem = $derived(batchJob.featuredItem);
-	const featuredRow = $derived(
-		featuredItem ? rows.find((row) => row.id === featuredItem.id) : undefined
-	);
-	const featuredProgress = $derived(featuredItem?.progress ?? 0);
-	const dropTitle = $derived(
-		isDragging
-			? 'Release to compress'
-			: isBusy
-				? 'Compression in progress'
-				: completedItems.length > 0
-					? 'Add more images'
-					: items.length > 0
-						? 'Review image list'
-						: 'Drag images here'
-	);
-	const dropCopy = $derived(
-		isDragging
-			? `Add up to ${remainingSlots} more image${remainingSlots === 1 ? '' : 's'}.`
-			: isBusy && featuredRow
-				? `${featuredRow.statusLabel} ${featuredRow.title}.`
-				: remainingSlots === 0
-					? `Batch limit reached: ${batchJob.maxBatchSize} images.`
-					: items.length > 0
-						? `${completedItems.length} complete, ${failedCount} failed, ${remainingSlots} slots open.`
-						: `Click to choose or drop JPEG, PNG, or WebP files. ${formatBytes(
-								batchJob.maxFileSize
-							)} each.`
-	);
-	const batchStatus = $derived(
-		items.length === 0
-			? `${batchJob.maxBatchSize} image batch limit`
-			: `${completedItems.length} complete / ${items.length} total`
-	);
+	const workspace = $derived(batchJob.workspaceFor({ isDragging }));
 
 	onMount(() => {
 		initializeCompressionSettings();
@@ -100,7 +52,7 @@
 	});
 
 	$effect(() => {
-		scheduleFileListEdgeUpdate(items.length, fileList);
+		scheduleFileListEdgeUpdate(workspace.summary.itemCount, fileList);
 	});
 
 	function handleWindowKeydown(event: KeyboardEvent) {
@@ -191,34 +143,12 @@
 		await batchJob.queueFiles(fileList, activePreset);
 	}
 
-	async function downloadZip() {
-		const zip = await batchJob.createResultZip();
-
-		if (zip) {
-			downloadBlob(zip, 'crush-results.zip');
-		}
-	}
-
 	function removeItem(id: string) {
 		batchJob.removeItem(id);
 	}
 
 	function clearQueue() {
 		batchJob.clear();
-	}
-
-	function downloadBlob(blob: Blob, fileName: string) {
-		const url = URL.createObjectURL(blob);
-		const anchor = document.createElement('a');
-
-		anchor.href = url;
-		anchor.download = fileName;
-		anchor.rel = 'noopener';
-		document.body.append(anchor);
-		anchor.click();
-		anchor.remove();
-
-		window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 	}
 </script>
 
@@ -273,7 +203,7 @@
 										type="button"
 										class:selected={outputType === format.type}
 										aria-pressed={outputType === format.type}
-										disabled={isBusy}
+										disabled={workspace.isBusy}
 										onclick={() => setCompressionOutputType(format.type)}
 									>
 										{format.label}
@@ -289,7 +219,7 @@
 										type="button"
 										class:selected={presetId === preset.id}
 										aria-pressed={presetId === preset.id}
-										disabled={isBusy || !arePresetsEnabled}
+										disabled={workspace.isBusy || !arePresetsEnabled}
 										onclick={() => setCompressionPreset(preset.id)}
 									>
 										<span class="preset-icon" aria-hidden="true">
@@ -309,13 +239,13 @@
 		</div>
 	</header>
 
-	<section class="stage" class:active={items.length > 0} aria-labelledby="app-title">
+	<section class="stage" class:active={workspace.hasItems} aria-labelledby="app-title">
 		<div class="intro">
 			<h1 id="app-title">Compress images</h1>
 			<p>Big images in. Small files out.</p>
 		</div>
 
-		<div class="workspace" class:active={items.length > 0}>
+		<div class="workspace" class:active={workspace.hasItems}>
 			<div class="flow-card">
 			<input
 				bind:this={fileInput}
@@ -331,11 +261,11 @@
 				type="button"
 				class="drop-zone"
 				class:dragging={isDragging}
-				class:busy={isBusy}
-				class:complete={completedItems.length > 0 && !isBusy}
-				class:failed={items.length > 0 && failedCount === items.length}
-				class:compact={items.length > 0}
-				aria-busy={isBusy}
+				class:busy={workspace.intake.showProgress}
+				class:complete={workspace.intake.isComplete}
+				class:failed={workspace.intake.isFailed}
+				class:compact={workspace.intake.isCompact}
+				aria-busy={workspace.isBusy}
 				onclick={openFileBrowser}
 				ondragenter={handleDragEnter}
 				ondragover={handleDragOver}
@@ -343,81 +273,67 @@
 				ondrop={handleDrop}
 			>
 				<span class="drop-media" aria-hidden="true">
-					{#if featuredItem?.originalUrl}
-						<img src={featuredItem.originalUrl} alt="" />
+					{#if workspace.intake.thumbnailUrl}
+						<img src={workspace.intake.thumbnailUrl} alt="" />
 					{:else}
 						<i class="ph ph-images-square drop-icon"></i>
 					{/if}
 				</span>
-				<span class="drop-title">{dropTitle}</span>
-				<span class="drop-copy">{dropCopy}</span>
-				{#if isBusy}
+				<span class="drop-title">{workspace.intake.title}</span>
+				<span class="drop-copy">{workspace.intake.copy}</span>
+				{#if workspace.intake.showProgress}
 					<span class="progress-track" aria-hidden="true">
-						<span style={`width: ${featuredProgress}%`}></span>
+						<span style={`width: ${workspace.intake.progress}%`}></span>
 					</span>
 				{/if}
 			</button>
 
-			{#if items.length > 0}
+			{#if workspace.hasItems}
 				<div class="queue-head">
 					<div class="file-line">
 						<i class="ph ph-stack file-mark" aria-hidden="true"></i>
 						<span class="file-details">
-							<strong>{`${items.length} image${items.length === 1 ? '' : 's'}`}</strong>
-							<span>{batchStatus}</span>
+							<strong>{workspace.summary.title}</strong>
+							<span>{workspace.summary.status}</span>
 						</span>
-						<span class="file-size">{formatBytes(batchJob.maxFileSize)} max</span>
+						<span class="file-size">{workspace.summary.fileSizeLimit}</span>
 					</div>
 
 					<div class="queue-actions">
 						<button
 							type="button"
-							disabled={completedItems.length === 0 || isZipping}
-							onclick={downloadZip}
+							disabled={!workspace.summary.canDownloadZip}
+							onclick={() => void batchJob.downloadResultZip()}
 						>
-							{isZipping ? 'Preparing ZIP' : 'Download ZIP'}
+							{workspace.summary.downloadZipLabel}
 						</button>
-						<button type="button" disabled={items.length === 0 || isBusy} onclick={clearQueue}>
-							Clear
+						<button
+							type="button"
+							disabled={!workspace.summary.canClear}
+							onclick={clearQueue}
+						>
+							{workspace.summary.clearLabel}
 						</button>
 					</div>
 				</div>
 			{/if}
 
-			{#if queueError}
-				<p class="notice error">{queueError}</p>
-			{/if}
+			{#each workspace.notices as notice}
+				<p class={`notice ${notice.tone}`}>{notice.message}</p>
+			{/each}
 
-			{#if zipError}
-				<p class="notice error">{zipError}</p>
-			{/if}
-
-			{#if completedItems.length > 0}
+			{#if workspace.metrics.length > 0}
 				<div class="result-line" aria-live="polite">
-					<div>
-						<span>Files</span>
-						<strong>{completedItems.length}</strong>
-					</div>
-					<div>
-						<span>Before</span>
-						<strong>{formatBytes(totalOriginalSize)}</strong>
-					</div>
-					<div>
-						<span>After</span>
-						<strong>{formatBytes(totalOutputSize)}</strong>
-					</div>
-					<div>
-						<span>Savings</span>
-						<strong>{formatSavings(totalSavingsPercent)}</strong>
-					</div>
-					<div>
-						<span>Compressed</span>
-						<strong>{formatBytes(compressedBytes)}</strong>
-					</div>
+					{#each workspace.metrics as metric}
+						<div>
+							<span>{metric.label}</span>
+							<strong>{metric.value}</strong>
+						</div>
+					{/each}
 				</div>
 			{/if}
 
-			{#if items.length > 0}
+			{#if workspace.hasItems}
 				<section
 					bind:this={fileList}
 					class="file-list"
@@ -427,7 +343,7 @@
 					aria-live="polite"
 					onscroll={updateFileListEdges}
 				>
-					{#each rows as row (row.id)}
+					{#each workspace.rows as row (row.id)}
 						<article
 							class="file-row {row.status}"
 							class:warning={row.hasWarning}
@@ -503,35 +419,8 @@
 			{/if}
 			</div>
 
-			{#if items.length > 0 && preview}
-				<aside class="preview-panel" aria-label="Focused result preview">
-					<div class="preview-head">
-						<div class="preview-title">
-							<span>Preview</span>
-							<h2>{preview.title}</h2>
-							<p>{preview.details}</p>
-						</div>
-
-						<div class="preview-actions">
-							<CompressionStatusBadge
-								status={preview.status}
-								label={preview.statusLabel}
-							/>
-							{#if preview.download}
-								<a
-									class="row-download preview-download"
-									href={preview.download.url}
-									download={preview.download.name}
-									aria-label={preview.download.label}
-								>
-									<i class="ph ph-download-simple" aria-hidden="true"></i>
-								</a>
-							{/if}
-						</div>
-					</div>
-
-					<FocusedResultPreview {preview} />
-				</aside>
+			{#if workspace.hasItems && workspace.preview}
+				<FocusedResultPreview preview={workspace.preview} />
 			{/if}
 		</div>
 	</section>
@@ -1233,65 +1122,6 @@
 		color: var(--color-on-primary);
 	}
 
-	.preview-panel {
-		position: sticky;
-		top: 16px;
-		display: grid;
-		min-width: 0;
-		gap: 16px;
-		border: 1px solid var(--color-line);
-		border-radius: var(--radius-md);
-		padding: 18px;
-		background: var(--color-neutral);
-	}
-
-	.preview-head {
-		display: flex;
-		align-items: start;
-		justify-content: space-between;
-		gap: 16px;
-		border-bottom: 1px solid var(--color-line);
-		padding-bottom: 14px;
-	}
-
-	.preview-title {
-		display: grid;
-		min-width: 0;
-		gap: 4px;
-	}
-
-	.preview-title span {
-		color: var(--color-muted);
-		font-size: 0.66rem;
-		font-weight: 700;
-		letter-spacing: 0.02em;
-		line-height: 1.35;
-	}
-
-	.preview-title h2 {
-		overflow-wrap: anywhere;
-		font-size: 1rem;
-	}
-
-	.preview-title p {
-		color: var(--color-muted);
-		font-size: 0.82rem;
-		line-height: 1.35;
-	}
-
-	.preview-actions {
-		display: flex;
-		flex: 0 0 auto;
-		flex-wrap: wrap;
-		justify-content: flex-end;
-		gap: 8px;
-	}
-
-	.preview-download {
-		width: 40px;
-		min-height: 40px;
-	}
-
 	.segmented {
 		display: grid;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1468,11 +1298,6 @@
 			width: min(760px, 100%);
 			grid-template-columns: 1fr;
 		}
-
-		.preview-panel {
-			position: static;
-			order: -1;
-		}
 	}
 
 	@media (max-width: 820px) {
@@ -1501,18 +1326,6 @@
 
 		.flow-card {
 			padding: 20px;
-		}
-
-		.preview-panel {
-			padding: 16px;
-		}
-
-		.preview-head {
-			display: grid;
-		}
-
-		.preview-actions {
-			justify-content: flex-start;
 		}
 
 		.drop-zone {
