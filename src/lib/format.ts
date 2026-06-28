@@ -1,5 +1,3 @@
-import type { OutputType } from './types';
-
 export function formatBytes(bytes: number): string {
 	if (!Number.isFinite(bytes) || bytes <= 0) {
 		return '0 B';
@@ -13,14 +11,6 @@ export function formatBytes(bytes: number): string {
 	return `${value.toFixed(precision)} ${units[index]}`;
 }
 
-export function calculateSavingsPercent(originalSize: number, outputSize: number): number {
-	if (originalSize <= 0) {
-		return 0;
-	}
-
-	return Math.round(((originalSize - outputSize) / originalSize) * 1000) / 10;
-}
-
 export function formatSavings(value: number): string {
 	return `${Math.round(value)}%`;
 }
@@ -30,46 +20,4 @@ export function formatDate(value: string): string {
 		dateStyle: 'medium',
 		timeStyle: 'short'
 	}).format(new Date(value));
-}
-
-export function extensionForOutputType(outputType: OutputType): string {
-	if (outputType === 'image/avif') {
-		return 'avif';
-	}
-
-	if (outputType === 'image/jpeg') {
-		return 'jpg';
-	}
-
-	if (outputType === 'image/png') {
-		return 'png';
-	}
-
-	return 'webp';
-}
-
-export function labelForOutputType(outputType: OutputType): string {
-	if (outputType === 'image/avif') {
-		return 'AVIF';
-	}
-
-	if (outputType === 'image/jpeg') {
-		return 'JPEG';
-	}
-
-	if (outputType === 'image/png') {
-		return 'PNG';
-	}
-
-	return 'WebP';
-}
-
-export function makeOutputName(originalName: string, outputType: OutputType): string {
-	const baseName =
-		originalName
-			.replace(/\.[^.]+$/, '')
-			.replace(/[^\w.-]+/g, '-')
-			.replace(/^-+|-+$/g, '') || 'image';
-
-	return `${baseName}-crushed.${extensionForOutputType(outputType)}`;
 }

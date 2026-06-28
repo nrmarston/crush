@@ -1,4 +1,5 @@
-import { DEFAULT_OUTPUT_TYPE, type CompressionPreset, type PresetId } from './types';
+import { DEFAULT_OUTPUT_TYPE } from './output-format';
+import type { CompressionPreset, PresetId } from './types';
 
 export const presets = [
 	{

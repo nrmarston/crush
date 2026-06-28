@@ -6,9 +6,9 @@ import type {
 	CompressionPreset,
 	CompressionResult,
 	CompressorRequest,
-	CompressorResponse,
-	OutputType
+	CompressorResponse
 } from '../types';
+import { calculateSavingsPercent, labelForOutputType, makeOutputName } from '../output-format';
 
 const worker = self as DedicatedWorkerGlobalScope;
 const PNG_OPTIMISE_OPTIONS = {
@@ -229,56 +229,6 @@ function getOutputDimensions(width: number, height: number, maxWidth: number | n
 
 function qualityToPercent(quality: number): number {
 	return Math.min(Math.max(Math.round(quality * 100), 1), 100);
-}
-
-function calculateSavingsPercent(originalSize: number, outputSize: number): number {
-	if (originalSize <= 0) {
-		return 0;
-	}
-
-	return Math.round(((originalSize - outputSize) / originalSize) * 1000) / 10;
-}
-
-function makeOutputName(originalName: string, outputType: OutputType): string {
-	const baseName =
-		originalName
-			.replace(/\.[^.]+$/, '')
-			.replace(/[^\w.-]+/g, '-')
-			.replace(/^-+|-+$/g, '') || 'image';
-
-	return `${baseName}-crushed.${extensionForOutputType(outputType)}`;
-}
-
-function extensionForOutputType(outputType: OutputType): string {
-	if (outputType === 'image/avif') {
-		return 'avif';
-	}
-
-	if (outputType === 'image/jpeg') {
-		return 'jpg';
-	}
-
-	if (outputType === 'image/png') {
-		return 'png';
-	}
-
-	return 'webp';
-}
-
-function labelForOutputType(outputType: OutputType): string {
-	if (outputType === 'image/avif') {
-		return 'AVIF';
-	}
-
-	if (outputType === 'image/jpeg') {
-		return 'JPEG';
-	}
-
-	if (outputType === 'image/png') {
-		return 'PNG';
-	}
-
-	return 'WebP';
 }
 
 function isAnimatedPng(buffer: ArrayBuffer): boolean {

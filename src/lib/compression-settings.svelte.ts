@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import { defaultPresetId, presets } from './presets';
-import { DEFAULT_OUTPUT_TYPE, OUTPUT_TYPES, type OutputType, type PresetId } from './types';
+import { DEFAULT_OUTPUT_TYPE, normalizeOutputType, type OutputType } from './output-format';
+import type { PresetId } from './types';
 
 const STORAGE_KEY = 'crush:compression-settings:v1';
 
@@ -91,10 +92,4 @@ function normalizePresetId(presetId: unknown): PresetId {
 	return presets.some((preset) => preset.id === presetId)
 		? (presetId as PresetId)
 		: defaultPresetId;
-}
-
-function normalizeOutputType(outputType: unknown): OutputType {
-	return OUTPUT_TYPES.includes(outputType as OutputType)
-		? (outputType as OutputType)
-		: DEFAULT_OUTPUT_TYPE;
 }

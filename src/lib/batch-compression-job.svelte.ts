@@ -1,6 +1,7 @@
 import { compressImage } from './compress';
-import { calculateSavingsPercent, formatBytes } from './format';
+import { formatBytes } from './format';
 import { readImageMetadata } from './image-metadata';
+import { calculateSavingsPercent } from './output-format';
 import {
 	MAX_BATCH_SIZE,
 	MAX_FILE_SIZE,

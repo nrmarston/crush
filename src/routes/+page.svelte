@@ -15,13 +15,16 @@
 		type BatchCompressionJobItem,
 		type BatchCompressionJobItemStatus
 	} from '$lib/batch-compression-job.svelte';
-	import { formatBytes, formatSavings, labelForOutputType } from '$lib/format';
-	import { presets } from '$lib/presets';
+	import { formatBytes, formatSavings } from '$lib/format';
 	import {
-		OUTPUT_TYPES,
-		type CompressionPreset,
-		type PresetId
-	} from '$lib/types';
+		OUTPUT_FORMATS,
+		createCompressionPlan,
+		labelForImageType,
+		labelForOutputType,
+		supportsCompressionPresets
+	} from '$lib/output-format';
+	import { presets } from '$lib/presets';
+	import type { CompressionPreset, PresetId } from '$lib/types';
 
 	const statusLabels: Record<BatchCompressionJobItemStatus, string> = {
 		reading: 'Reading',
@@ -50,11 +53,9 @@
 	const selectedPreset = $derived(
 		presets.find((preset) => preset.id === presetId) ?? presets[1]
 	);
-	const isPngOutput = $derived(outputType === 'image/png');
+	const arePresetsEnabled = $derived(supportsCompressionPresets(outputType));
 	const activePreset = $derived<CompressionPreset>(
-		isPngOutput
-			? { ...selectedPreset, outputType, quality: 1, maxWidth: null }
-			: { ...selectedPreset, outputType }
+		createCompressionPlan(selectedPreset, outputType)
 	);
 	const items = $derived(batchJob.items);
 	const completedItems = $derived(batchJob.completedItems);
@@ -209,36 +210,16 @@
 		}
 
 		if (item.status === 'waiting') {
-			return `${typeLabel(item.originalType)} input - queued for ${labelForOutputType(
+			return `${labelForImageType(item.originalType)} input - queued for ${labelForOutputType(
 				item.preset.outputType
 			)}`;
 		}
 
 		if (item.status === 'reading') {
-			return `Reading ${typeLabel(item.originalType)} input.`;
+			return `Reading ${labelForImageType(item.originalType)} input.`;
 		}
 
-		return typeLabel(item.originalType);
-	}
-
-	function typeLabel(type: string): string {
-		if (type === 'image/jpeg') {
-			return 'JPEG';
-		}
-
-		if (type === 'image/png') {
-			return 'PNG';
-		}
-
-		if (type === 'image/avif') {
-			return 'AVIF';
-		}
-
-		if (type === 'image/webp') {
-			return 'WebP';
-		}
-
-		return type || 'Unknown';
+		return labelForImageType(item.originalType);
 	}
 
 	function downloadBlob(blob: Blob, fileName: string) {
@@ -291,15 +272,15 @@
 						<div class="setting-block">
 							<h3>Output</h3>
 							<div class="segmented" aria-label="Output format">
-								{#each OUTPUT_TYPES as type}
+								{#each OUTPUT_FORMATS as format}
 									<button
 										type="button"
-										class:selected={outputType === type}
-										aria-pressed={outputType === type}
+										class:selected={outputType === format.type}
+										aria-pressed={outputType === format.type}
 										disabled={isBusy}
-										onclick={() => setCompressionOutputType(type)}
+										onclick={() => setCompressionOutputType(format.type)}
 									>
-										{labelForOutputType(type)}
+										{format.label}
 									</button>
 								{/each}
 							</div>
@@ -312,7 +293,7 @@
 										type="button"
 										class:selected={presetId === preset.id}
 										aria-pressed={presetId === preset.id}
-										disabled={isBusy || isPngOutput}
+										disabled={isBusy || !arePresetsEnabled}
 										onclick={() => setCompressionPreset(preset.id)}
 									>
 										<span class="preset-icon" aria-hidden="true">

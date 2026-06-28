@@ -1,11 +1,12 @@
+import type { OutputType } from './output-format';
+
 export const SUPPORTED_INPUT_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
-export const OUTPUT_TYPES = ['image/avif', 'image/webp', 'image/jpeg', 'image/png'] as const;
+export { DEFAULT_OUTPUT_TYPE, OUTPUT_TYPES } from './output-format';
+export type { OutputType };
 export const MAX_FILE_SIZE = 25 * 1024 * 1024;
 export const MAX_BATCH_SIZE = 25;
 
 export type InputImageType = (typeof SUPPORTED_INPUT_TYPES)[number];
-export type OutputType = (typeof OUTPUT_TYPES)[number];
-export const DEFAULT_OUTPUT_TYPE: OutputType = 'image/avif';
 export type PresetId = 'quality' | 'balanced' | 'smallest';
 export type CompressionStatus = 'waiting' | 'compressing' | 'complete' | 'failed';
 export type CompressionResultNote = 'already-optimized';
