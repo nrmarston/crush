@@ -82,22 +82,3 @@ export type CompressorResponse =
 			id: string;
 			error: string;
 	  };
-
-export type CompressionHistoryFile = {
-	outputName: string;
-	outputType: OutputType;
-	outputSize: number;
-	outputBlob: Blob;
-};
-
-export type CompressionHistoryJob = {
-	id: string;
-	createdAt: string;
-	presetId: PresetId;
-	outputType: OutputType;
-	imageCount: number;
-	totalOriginalSize: number;
-	totalOutputSize: number;
-	totalSavingsPercent: number;
-	files: CompressionHistoryFile[];
-};

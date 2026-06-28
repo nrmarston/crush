@@ -111,6 +111,28 @@ describe('batch compression job', () => {
 		expect(harness.job.completedItems).toHaveLength(1);
 		expect(harness.job.focusedItem?.id).toBe('item-1');
 		expect(harness.job.previewItem?.id).toBe('item-1');
+		expect(harness.job.preview).toMatchObject({
+			id: 'item-1',
+			title: 'hero.jpg',
+			status: 'complete',
+			statusLabel: 'Complete',
+			details: 'WebP - 640 x 480',
+			frame: {
+				width: 640,
+				height: 480,
+				aspectRatio: '640 / 480'
+			},
+			comparison: {
+				originalUrl: 'blob:fake-1',
+				outputUrl: 'blob:fake-2',
+				imageName: 'hero.jpg'
+			},
+			download: {
+				url: 'blob:fake-2',
+				name: 'hero-crushed.webp',
+				label: 'Download hero-crushed.webp'
+			}
+		});
 		expect(harness.job.totalOriginalSize).toBe(1000);
 		expect(harness.job.totalOutputSize).toBe(400);
 		expect(harness.job.totalSavingsPercent).toBe(60);
@@ -130,6 +152,10 @@ describe('batch compression job', () => {
 		expect(harness.job.focusedItem?.id).toBe('item-2');
 		expect(harness.job.focusItem('item-1')).toBe(true);
 		expect(harness.job.focusedItem?.id).toBe('item-1');
+		expect(harness.job.rows.map((row) => ({ id: row.id, isFocused: row.isFocused }))).toEqual([
+			{ id: 'item-1', isFocused: true },
+			{ id: 'item-2', isFocused: false }
+		]);
 
 		await harness.job.queueFiles([product], preset);
 		await flushAsyncWork();
@@ -167,6 +193,25 @@ describe('batch compression job', () => {
 		expect(harness.job.focusItem('item-1')).toBe(false);
 		expect(harness.job.focusedItem).toBeUndefined();
 		expect(harness.job.previewItem?.id).toBe('item-1');
+		expect(harness.job.preview).toMatchObject({
+			id: 'item-1',
+			status: 'compressing',
+			statusLabel: 'Compressing',
+			details: 'Creating a WebP file locally.',
+			originalUrl: 'blob:fake-1'
+		});
+		expect(harness.job.rows[0]).toMatchObject({
+			id: 'item-1',
+			status: 'compressing',
+			statusLabel: 'Compressing',
+			details: 'Creating a WebP file locally.',
+			canFocus: false,
+			isFocused: false,
+			canRemove: false,
+			showProgress: true,
+			progressLabel: 'Compression progress for hero.jpg',
+			notices: []
+		});
 
 		resolveCompression(compressionResult('item-1', file, preset));
 		await flushAsyncWork();
@@ -199,6 +244,75 @@ describe('batch compression job', () => {
 		expect(harness.createdUrls).toEqual([]);
 		expect(harness.job.failedCount).toBe(1);
 		expect(harness.job.focusItem('item-1')).toBe(false);
+		expect(harness.job.rows[0]).toMatchObject({
+			id: 'item-1',
+			status: 'failed',
+			statusLabel: 'Failed',
+			details: 'text/plain',
+			canFocus: false,
+			canRemove: true,
+			showProgress: false,
+			notices: [
+				{
+					tone: 'error',
+					message: 'Unsupported file. Add a JPEG, PNG, or WebP image.'
+				}
+			]
+		});
+	});
+
+	it('exposes row downloads and output notices through the Batch Workspace Interface', async () => {
+		const largerHarness = createHarness({}, 1200);
+		const hero = imageFile('hero.jpg', 'image/jpeg', 1000);
+
+		await largerHarness.job.queueFiles([hero], preset);
+		await flushAsyncWork();
+
+		expect(largerHarness.job.rows[0]).toMatchObject({
+			id: 'item-1',
+			title: 'hero.jpg',
+			status: 'complete',
+			statusLabel: 'Complete',
+			details: 'WebP - 640 x 480',
+			canFocus: true,
+			isFocused: true,
+			canRemove: true,
+			showProgress: false,
+			hasWarning: true,
+			download: {
+				url: 'blob:fake-2',
+				name: 'hero-crushed.webp',
+				label: 'Download hero-crushed.webp'
+			},
+			notices: [
+				{
+					tone: 'warn',
+					message: 'The compressed file is larger than the original.'
+				}
+			]
+		});
+
+		const pngPreset = {
+			...preset,
+			outputType: 'image/png' as const
+		};
+		const optimizedHarness = createHarness({
+			compress: vi.fn(async (id: string, file: File, compressionPreset: CompressionPreset) => ({
+				...compressionResult(id, file, compressionPreset),
+				note: 'already-optimized' as const
+			}))
+		});
+		const badge = imageFile('badge.png', 'image/png', 800);
+
+		await optimizedHarness.job.queueFiles([badge], pngPreset);
+		await flushAsyncWork();
+
+		expect(optimizedHarness.job.rows[0].notices).toEqual([
+			{
+				tone: 'neutral',
+				message: 'Already optimized; original PNG kept.'
+			}
+		]);
 	});
 
 	it('keeps active items in the queue and revokes URLs when complete items are removed', async () => {

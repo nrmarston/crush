@@ -7,7 +7,6 @@ import {
 	labelForImageType,
 	makeOutputName,
 	normalizeOutputType,
-	supportsCompressionPresets,
 	type OutputType
 } from './output-format';
 import type { CompressionPreset } from './types';
@@ -27,33 +26,28 @@ describe('output format planning', () => {
 			OUTPUT_FORMATS.map((format) => ({
 				type: format.type,
 				label: format.label,
-				extension: format.extension,
-				supportsCompressionPresets: format.supportsCompressionPresets
+				extension: format.extension
 			}))
 		).toEqual([
 			{
 				type: 'image/avif',
 				label: 'AVIF',
-				extension: 'avif',
-				supportsCompressionPresets: true
+				extension: 'avif'
 			},
 			{
 				type: 'image/webp',
 				label: 'WebP',
-				extension: 'webp',
-				supportsCompressionPresets: true
+				extension: 'webp'
 			},
 			{
 				type: 'image/jpeg',
 				label: 'JPEG',
-				extension: 'jpg',
-				supportsCompressionPresets: true
+				extension: 'jpg'
 			},
 			{
 				type: 'image/png',
 				label: 'PNG',
-				extension: 'png',
-				supportsCompressionPresets: false
+				extension: 'png'
 			}
 		]);
 	});
@@ -62,22 +56,32 @@ describe('output format planning', () => {
 		const presetBackedFormats = ['image/avif', 'image/webp', 'image/jpeg'] satisfies OutputType[];
 
 		for (const outputType of presetBackedFormats) {
-			expect(createCompressionPlan(selectedPreset, outputType)).toEqual({
+			const plan = createCompressionPlan(selectedPreset, outputType);
+
+			expect(plan.compressionPreset).toEqual({
 				...selectedPreset,
 				outputType
 			});
-			expect(supportsCompressionPresets(outputType)).toBe(true);
+			expect(plan.outputFormat.type).toBe(outputType);
+			expect(plan.supportsCompressionPresets).toBe(true);
 		}
 	});
 
 	it('plans PNG as lossless output without selected preset compression', () => {
-		expect(createCompressionPlan(selectedPreset, 'image/png')).toEqual({
+		const plan = createCompressionPlan(selectedPreset, 'image/png');
+
+		expect(plan.compressionPreset).toEqual({
 			...selectedPreset,
 			outputType: 'image/png',
 			quality: 1,
 			maxWidth: null
 		});
-		expect(supportsCompressionPresets('image/png')).toBe(false);
+		expect(plan.outputFormat).toEqual({
+			type: 'image/png',
+			label: 'PNG',
+			extension: 'png'
+		});
+		expect(plan.supportsCompressionPresets).toBe(false);
 	});
 
 	it('normalizes stored output values through the output format catalog', () => {

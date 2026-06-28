@@ -1,6 +1,10 @@
 import { compressImage } from './compress';
+import {
+	createFocusedResultPreviewFrame,
+	type FocusedResultPreviewFrame
+} from './focused-result-preview';
 import { intakeStaticImage } from './image-metadata';
-import { calculateSavingsPercent } from './output-format';
+import { calculateSavingsPercent, labelForImageType, labelForOutputType } from './output-format';
 import {
 	MAX_BATCH_SIZE,
 	MAX_FILE_SIZE,
@@ -16,6 +20,53 @@ export type BatchCompressionJobItemStatus =
 	| 'compressing'
 	| 'complete'
 	| 'failed';
+
+export type BatchCompressionJobDownload = {
+	url: string;
+	name: string;
+	label: string;
+};
+
+export type BatchCompressionJobItemNotice = {
+	tone: 'error' | 'warn' | 'neutral';
+	message: string;
+};
+
+export type BatchCompressionJobRow = {
+	id: string;
+	title: string;
+	status: BatchCompressionJobItemStatus;
+	statusLabel: string;
+	details: string;
+	thumbnailUrl?: string;
+	progress: number;
+	showProgress: boolean;
+	progressLabel: string;
+	canFocus: boolean;
+	isFocused: boolean;
+	focusLabel: string;
+	canRemove: boolean;
+	removeLabel: string;
+	download?: BatchCompressionJobDownload;
+	hasWarning: boolean;
+	notices: BatchCompressionJobItemNotice[];
+};
+
+export type BatchCompressionJobPreview = {
+	id: string;
+	title: string;
+	status: BatchCompressionJobItemStatus;
+	statusLabel: string;
+	details: string;
+	originalUrl?: string;
+	frame: FocusedResultPreviewFrame;
+	comparison?: {
+		originalUrl: string;
+		outputUrl: string;
+		imageName: string;
+	};
+	download?: BatchCompressionJobDownload;
+};
 
 export type BatchCompressionJobItem = {
 	id: string;
@@ -83,6 +134,7 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 	const progressTimers = new Map<string, ProgressTimer>();
 	const completedItems = $derived(items.filter(isCompletedBatchCompressionJobItem));
 	const focusedItem = $derived(resolveFocusedItem());
+	const rows = $derived(items.map((item) => createBatchCompressionJobRow(item, focusedItem?.id)));
 	const failedCount = $derived(items.filter((item) => item.status === 'failed').length);
 	const isBusy = $derived(
 		isProcessing ||
@@ -107,6 +159,7 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 			items[0]
 	);
 	const previewItem = $derived(focusedItem ?? featuredItem);
+	const preview = $derived(previewItem ? createBatchCompressionJobPreview(previewItem) : undefined);
 
 	async function queueFiles(fileList: FileList | File[], preset: CompressionPreset) {
 		if (isDisposed) {
@@ -453,11 +506,17 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		get completedItems() {
 			return completedItems;
 		},
+		get rows() {
+			return rows;
+		},
 		get focusedItem() {
 			return focusedItem;
 		},
 		get previewItem() {
 			return previewItem;
+		},
+		get preview() {
+			return preview;
 		},
 		get failedCount() {
 			return failedCount;
@@ -506,28 +565,178 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 	};
 }
 
-export function canRemoveBatchCompressionJobItem(item: BatchCompressionJobItem): boolean {
+function createBatchCompressionJobRow(
+	item: BatchCompressionJobItem,
+	focusedResultId: string | undefined
+): BatchCompressionJobRow {
+	const download = downloadForBatchCompressionJobItem(item);
+	const notices = noticesForBatchCompressionJobItem(item);
+	const canFocus = isCompletedBatchCompressionJobItem(item);
+
+	return {
+		id: item.id,
+		title: item.originalName,
+		status: item.status,
+		statusLabel: labelForBatchCompressionJobItemStatus(item.status),
+		details: detailsForBatchCompressionJobItem(item),
+		thumbnailUrl: item.originalUrl,
+		progress: item.progress,
+		showProgress: item.status !== 'failed' && item.status !== 'complete',
+		progressLabel: `Compression progress for ${item.originalName}`,
+		canFocus,
+		isFocused: canFocus && item.id === focusedResultId,
+		focusLabel: `Show ${item.originalName} in preview`,
+		canRemove: canRemoveBatchCompressionJobItem(item),
+		removeLabel: `Remove ${item.originalName}`,
+		download,
+		hasWarning: notices.some((notice) => notice.tone === 'warn'),
+		notices
+	};
+}
+
+function createBatchCompressionJobPreview(
+	item: BatchCompressionJobItem
+): BatchCompressionJobPreview {
+	const comparison =
+		isCompletedBatchCompressionJobItem(item) && item.originalUrl
+			? {
+					originalUrl: item.originalUrl,
+					outputUrl: item.outputUrl,
+					imageName: item.originalName
+				}
+			: undefined;
+
+	return {
+		id: item.id,
+		title: item.originalName,
+		status: item.status,
+		statusLabel: labelForBatchCompressionJobItemStatus(item.status),
+		details: detailsForBatchCompressionJobItem(item),
+		originalUrl: item.originalUrl,
+		frame: createFocusedResultPreviewFrame({
+			originalWidth: item.originalWidth,
+			originalHeight: item.originalHeight,
+			width: item.width,
+			height: item.height
+		}),
+		comparison,
+		download: downloadForBatchCompressionJobItem(item)
+	};
+}
+
+function canRemoveBatchCompressionJobItem(item: BatchCompressionJobItem): boolean {
 	return item.status !== 'reading' && item.status !== 'compressing';
 }
 
-export function isCompletedBatchCompressionJobItem(
+function isCompletedBatchCompressionJobItem(
 	item: BatchCompressionJobItem
 ): item is CompletedBatchCompressionJobItem {
 	return item.status === 'complete' && Boolean(item.file && item.outputUrl && item.result);
 }
 
-export function isActiveBatchCompressionJobItem(item: BatchCompressionJobItem): boolean {
-	return item.status === 'reading' || item.status === 'compressing';
-}
-
-export function isLargerBatchCompressionJobItem(item: BatchCompressionJobItem): boolean {
+function isLargerBatchCompressionJobItem(item: BatchCompressionJobItem): boolean {
 	return (
 		isCompletedBatchCompressionJobItem(item) && item.result.outputSize > item.result.originalSize
 	);
 }
 
-export function isAlreadyOptimizedBatchCompressionJobItem(item: BatchCompressionJobItem): boolean {
+function isAlreadyOptimizedBatchCompressionJobItem(item: BatchCompressionJobItem): boolean {
 	return isCompletedBatchCompressionJobItem(item) && item.result.note === 'already-optimized';
+}
+
+function detailsForBatchCompressionJobItem(item: BatchCompressionJobItem): string {
+	if (isCompletedBatchCompressionJobItem(item)) {
+		return `${labelForOutputType(item.result.outputType)} - ${dimensionsForBatchCompressionJobItem(
+			item
+		)}`;
+	}
+
+	if (item.status === 'compressing') {
+		return `Creating a ${labelForOutputType(item.preset.outputType)} file locally.`;
+	}
+
+	if (item.status === 'waiting') {
+		return `${labelForImageType(item.originalType)} input - queued for ${labelForOutputType(
+			item.preset.outputType
+		)}`;
+	}
+
+	if (item.status === 'reading') {
+		return `Reading ${labelForImageType(item.originalType)} input.`;
+	}
+
+	return labelForImageType(item.originalType);
+}
+
+function dimensionsForBatchCompressionJobItem(item: BatchCompressionJobItem): string {
+	if (!item.width || !item.height) {
+		return '-';
+	}
+
+	return `${item.width} x ${item.height}`;
+}
+
+function downloadForBatchCompressionJobItem(
+	item: BatchCompressionJobItem
+): BatchCompressionJobDownload | undefined {
+	if (!isCompletedBatchCompressionJobItem(item)) {
+		return undefined;
+	}
+
+	return {
+		url: item.outputUrl,
+		name: item.result.outputName,
+		label: `Download ${item.result.outputName}`
+	};
+}
+
+function noticesForBatchCompressionJobItem(
+	item: BatchCompressionJobItem
+): BatchCompressionJobItemNotice[] {
+	const notices: BatchCompressionJobItemNotice[] = [];
+
+	if (item.error) {
+		notices.push({
+			tone: 'error',
+			message: item.error
+		});
+	}
+
+	if (isLargerBatchCompressionJobItem(item)) {
+		notices.push({
+			tone: 'warn',
+			message: 'The compressed file is larger than the original.'
+		});
+	}
+
+	if (isAlreadyOptimizedBatchCompressionJobItem(item)) {
+		notices.push({
+			tone: 'neutral',
+			message: 'Already optimized; original PNG kept.'
+		});
+	}
+
+	return notices;
+}
+
+function labelForBatchCompressionJobItemStatus(status: BatchCompressionJobItemStatus): string {
+	if (status === 'reading') {
+		return 'Reading';
+	}
+
+	if (status === 'waiting') {
+		return 'Waiting';
+	}
+
+	if (status === 'compressing') {
+		return 'Compressing';
+	}
+
+	if (status === 'complete') {
+		return 'Complete';
+	}
+
+	return 'Failed';
 }
 
 function clonePreset(preset: CompressionPreset): CompressionPreset {

@@ -6,36 +6,14 @@
 		setCompressionOutputType,
 		setCompressionPreset
 	} from '$lib/compression-settings.svelte';
-	import {
-		createBatchCompressionJob,
-		isActiveBatchCompressionJobItem as isActive,
-		isAlreadyOptimizedBatchCompressionJobItem as isAlreadyOptimized,
-		isCompletedBatchCompressionJobItem as isCompleted,
-		isLargerBatchCompressionJobItem as isLarger,
-		type BatchCompressionJobItem,
-		type BatchCompressionJobItemStatus
-	} from '$lib/batch-compression-job.svelte';
+	import { createBatchCompressionJob } from '$lib/batch-compression-job.svelte';
 	import { formatBytes, formatSavings } from '$lib/format';
-	import {
-		OUTPUT_FORMATS,
-		createCompressionPlan,
-		labelForImageType,
-		labelForOutputType,
-		supportsCompressionPresets
-	} from '$lib/output-format';
+	import { OUTPUT_FORMATS, createCompressionPlan } from '$lib/output-format';
 	import { presets } from '$lib/presets';
 	import CompressionStatusBadge from '$lib/CompressionStatusBadge.svelte';
+	import FocusedResultPreview from '$lib/FocusedResultPreview.svelte';
 	import ThemeToggle from '$lib/ThemeToggle.svelte';
-	import VisualComparison from '$lib/VisualComparison.svelte';
 	import type { CompressionPreset, PresetId } from '$lib/types';
-
-	const statusLabels: Record<BatchCompressionJobItemStatus, string> = {
-		reading: 'Reading',
-		waiting: 'Waiting',
-		compressing: 'Compressing',
-		complete: 'Complete',
-		failed: 'Failed'
-	};
 
 	const presetIcons: Record<PresetId, string> = {
 		quality: 'ph-sparkle',
@@ -59,14 +37,15 @@
 	const selectedPreset = $derived(
 		presets.find((preset) => preset.id === presetId) ?? presets[1]
 	);
-	const arePresetsEnabled = $derived(supportsCompressionPresets(outputType));
+	const compressionPlan = $derived(createCompressionPlan(selectedPreset, outputType));
+	const arePresetsEnabled = $derived(compressionPlan.supportsCompressionPresets);
 	const activePreset = $derived<CompressionPreset>(
-		createCompressionPlan(selectedPreset, outputType)
+		compressionPlan.compressionPreset
 	);
 	const items = $derived(batchJob.items);
+	const rows = $derived(batchJob.rows);
 	const completedItems = $derived(batchJob.completedItems);
-	const focusedItem = $derived(batchJob.focusedItem);
-	const previewItem = $derived(batchJob.previewItem);
+	const preview = $derived(batchJob.preview);
 	const failedCount = $derived(batchJob.failedCount);
 	const isBusy = $derived(batchJob.isBusy);
 	const isZipping = $derived(batchJob.isZipping);
@@ -78,6 +57,9 @@
 	const totalSavingsPercent = $derived(batchJob.totalSavingsPercent);
 	const compressedBytes = $derived(batchJob.compressedBytes);
 	const featuredItem = $derived(batchJob.featuredItem);
+	const featuredRow = $derived(
+		featuredItem ? rows.find((row) => row.id === featuredItem.id) : undefined
+	);
 	const featuredProgress = $derived(featuredItem?.progress ?? 0);
 	const dropTitle = $derived(
 		isDragging
@@ -93,8 +75,8 @@
 	const dropCopy = $derived(
 		isDragging
 			? `Add up to ${remainingSlots} more image${remainingSlots === 1 ? '' : 's'}.`
-			: isBusy && featuredItem
-				? `${statusLabels[featuredItem.status]} ${featuredItem.originalName}.`
+			: isBusy && featuredRow
+				? `${featuredRow.statusLabel} ${featuredRow.title}.`
 				: remainingSlots === 0
 					? `Batch limit reached: ${batchJob.maxBatchSize} images.`
 					: items.length > 0
@@ -221,52 +203,8 @@
 		batchJob.removeItem(id);
 	}
 
-	function focusItem(item: BatchCompressionJobItem) {
-		if (isCompleted(item)) {
-			batchJob.focusItem(item.id);
-		}
-	}
-
 	function clearQueue() {
 		batchJob.clear();
-	}
-
-	function dimensionsFor(item: BatchCompressionJobItem): string {
-		if (!item.width || !item.height) {
-			return '-';
-		}
-
-		return `${item.width} x ${item.height}`;
-	}
-
-	function detailsFor(item: BatchCompressionJobItem): string {
-		if (isCompleted(item)) {
-			return `${labelForOutputType(item.result.outputType)} - ${dimensionsFor(item)}`;
-		}
-
-		if (item.status === 'compressing') {
-			return `Creating a ${labelForOutputType(item.preset.outputType)} file locally.`;
-		}
-
-		if (item.status === 'waiting') {
-			return `${labelForImageType(item.originalType)} input - queued for ${labelForOutputType(
-				item.preset.outputType
-			)}`;
-		}
-
-		if (item.status === 'reading') {
-			return `Reading ${labelForImageType(item.originalType)} input.`;
-		}
-
-		return labelForImageType(item.originalType);
-	}
-
-	function previewWidthFor(item: BatchCompressionJobItem): number | undefined {
-		return item.originalWidth ?? item.width;
-	}
-
-	function previewHeightFor(item: BatchCompressionJobItem): number | undefined {
-		return item.originalHeight ?? item.height;
 	}
 
 	function downloadBlob(blob: Blob, fileName: string) {
@@ -319,7 +257,7 @@
 						<div class="popover-head">
 							<h2>Settings</h2>
 							<p>
-								{labelForOutputType(outputType)} output, {selectedPreset.label.toLowerCase()}
+								{compressionPlan.outputFormat.label} output, {selectedPreset.label.toLowerCase()}
 								preset.
 							</p>
 						</div>
@@ -489,26 +427,26 @@
 					aria-live="polite"
 					onscroll={updateFileListEdges}
 				>
-					{#each items as item (item.id)}
+					{#each rows as row (row.id)}
 						<article
-							class="file-row {item.status}"
-							class:warning={isLarger(item)}
-							class:selectable={isCompleted(item)}
-							class:selected={focusedItem?.id === item.id}
+							class="file-row {row.status}"
+							class:warning={row.hasWarning}
+							class:selectable={row.canFocus}
+							class:selected={row.isFocused}
 						>
-							{#if isCompleted(item)}
+							{#if row.canFocus}
 								<button
 									type="button"
 									class="row-select-hit"
-									aria-label={`Show ${item.originalName} in preview`}
-									aria-pressed={focusedItem?.id === item.id}
-									onclick={() => focusItem(item)}
+									aria-label={row.focusLabel}
+									aria-pressed={row.isFocused}
+									onclick={() => batchJob.focusItem(row.id)}
 								></button>
 							{/if}
 
 							<span class="file-thumb" aria-hidden="true">
-								{#if item.originalUrl}
-									<img src={item.originalUrl} alt="" />
+								{#if row.thumbnailUrl}
+									<img src={row.thumbnailUrl} alt="" />
 								{:else}
 									<i class="ph ph-file-image"></i>
 								{/if}
@@ -516,43 +454,35 @@
 
 							<div class="row-main">
 								<div class="row-title">
-									<strong>{item.originalName}</strong>
+									<strong>{row.title}</strong>
 									<CompressionStatusBadge
-										status={item.status}
-										label={statusLabels[item.status]}
+										status={row.status}
+										label={row.statusLabel}
 									/>
 								</div>
-								<span class="row-meta">{detailsFor(item)}</span>
+								<span class="row-meta">{row.details}</span>
 
-								{#if item.status !== 'failed' && item.status !== 'complete'}
+								{#if row.showProgress}
 									<span
 										class="row-progress"
-										aria-label={`Compression progress for ${item.originalName}`}
+										aria-label={row.progressLabel}
 									>
-										<span style={`width: ${item.progress}%`}></span>
+										<span style={`width: ${row.progress}%`}></span>
 									</span>
 								{/if}
 
-								{#if item.error}
-									<span class="row-notice error">{item.error}</span>
-								{/if}
-
-								{#if isLarger(item)}
-									<span class="row-notice warn">The compressed file is larger than the original.</span>
-								{/if}
-
-								{#if isAlreadyOptimized(item)}
-									<span class="row-notice neutral">Already optimized; original PNG kept.</span>
-								{/if}
+								{#each row.notices as notice}
+									<span class={`row-notice ${notice.tone}`}>{notice.message}</span>
+								{/each}
 							</div>
 
 							<div class="row-actions">
-								{#if isCompleted(item)}
+								{#if row.download}
 									<a
 										class="row-download"
-										href={item.outputUrl}
-										download={item.result.outputName}
-										aria-label={`Download ${item.result.outputName}`}
+										href={row.download.url}
+										download={row.download.name}
+										aria-label={row.download.label}
 									>
 										<i class="ph ph-download-simple" aria-hidden="true"></i>
 									</a>
@@ -560,9 +490,9 @@
 								<button
 									type="button"
 									class="row-remove"
-									disabled={isActive(item)}
-									aria-label={`Remove ${item.originalName}`}
-									onclick={() => removeItem(item.id)}
+									disabled={!row.canRemove}
+									aria-label={row.removeLabel}
+									onclick={() => removeItem(row.id)}
 								>
 									<i class="ph ph-x" aria-hidden="true"></i>
 								</button>
@@ -573,26 +503,26 @@
 			{/if}
 			</div>
 
-			{#if items.length > 0 && previewItem}
+			{#if items.length > 0 && preview}
 				<aside class="preview-panel" aria-label="Focused result preview">
 					<div class="preview-head">
 						<div class="preview-title">
 							<span>Preview</span>
-							<h2>{previewItem.originalName}</h2>
-							<p>{detailsFor(previewItem)}</p>
+							<h2>{preview.title}</h2>
+							<p>{preview.details}</p>
 						</div>
 
 						<div class="preview-actions">
 							<CompressionStatusBadge
-								status={previewItem.status}
-								label={statusLabels[previewItem.status]}
+								status={preview.status}
+								label={preview.statusLabel}
 							/>
-							{#if isCompleted(previewItem)}
+							{#if preview.download}
 								<a
 									class="row-download preview-download"
-									href={previewItem.outputUrl}
-									download={previewItem.result.outputName}
-									aria-label={`Download ${previewItem.result.outputName}`}
+									href={preview.download.url}
+									download={preview.download.name}
+									aria-label={preview.download.label}
 								>
 									<i class="ph ph-download-simple" aria-hidden="true"></i>
 								</a>
@@ -600,15 +530,7 @@
 						</div>
 					</div>
 
-					<VisualComparison
-						originalUrl={previewItem.originalUrl}
-						outputUrl={isCompleted(previewItem) ? previewItem.outputUrl : undefined}
-						imageName={previewItem.originalName}
-						status={previewItem.status}
-						statusLabel={statusLabels[previewItem.status]}
-						width={previewWidthFor(previewItem)}
-						height={previewHeightFor(previewItem)}
-					/>
+					<FocusedResultPreview {preview} />
 				</aside>
 			{/if}
 		</div>

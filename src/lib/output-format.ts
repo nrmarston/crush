@@ -31,7 +31,6 @@ export type OutputFormat = {
 	type: OutputType;
 	label: string;
 	extension: string;
-	supportsCompressionPresets: boolean;
 };
 
 export type CompressionPlanningPreset = {
@@ -40,16 +39,35 @@ export type CompressionPlanningPreset = {
 	maxWidth: number | null;
 };
 
-export type CompressionPlan<T extends CompressionPlanningPreset> = Omit<
+export type PlannedCompressionPreset<T extends CompressionPlanningPreset> = Omit<
 	T,
 	keyof CompressionPlanningPreset
 > &
 	CompressionPlanningPreset;
 
-export const OUTPUT_FORMATS = outputFormatDefinitions satisfies readonly OutputFormat[];
+export type CompressionPlan<T extends CompressionPlanningPreset> = {
+	outputFormat: OutputFormat;
+	compressionPreset: PlannedCompressionPreset<T>;
+	supportsCompressionPresets: boolean;
+};
+
+type OutputFormatDefinition = OutputFormat & {
+	supportsCompressionPresets: boolean;
+};
+
+export const OUTPUT_FORMATS: readonly OutputFormat[] = outputFormatDefinitions.map(
+	({ type, label, extension }) => ({
+		type,
+		label,
+		extension
+	})
+);
 export const OUTPUT_TYPES: readonly OutputType[] = OUTPUT_FORMATS.map((format) => format.type);
 export const DEFAULT_OUTPUT_TYPE: OutputType = 'image/avif';
 
+const outputFormatDefinitionsByType = Object.fromEntries(
+	outputFormatDefinitions.map((format) => [format.type, format])
+) as Record<OutputType, OutputFormatDefinition>;
 const outputFormatsByType = Object.fromEntries(
 	OUTPUT_FORMATS.map((format) => [format.type, format])
 ) as Record<OutputType, OutputFormat>;
@@ -78,25 +96,28 @@ export function extensionForOutputType(outputType: OutputType): string {
 	return outputFormatFor(outputType).extension;
 }
 
-export function supportsCompressionPresets(outputType: OutputType): boolean {
-	return outputFormatFor(outputType).supportsCompressionPresets;
-}
-
 export function createCompressionPlan<T extends CompressionPlanningPreset>(
 	selectedPreset: T,
 	outputType: OutputType
 ): CompressionPlan<T> {
-	const plan = {
+	const outputFormat = outputFormatFor(outputType);
+	const supportsCompressionPresets =
+		outputFormatDefinitionsByType[outputType].supportsCompressionPresets;
+	const compressionPreset = {
 		...selectedPreset,
 		outputType
-	} as CompressionPlan<T>;
+	} as PlannedCompressionPreset<T>;
 
-	if (!supportsCompressionPresets(outputType)) {
-		plan.quality = 1;
-		plan.maxWidth = null;
+	if (!supportsCompressionPresets) {
+		compressionPreset.quality = 1;
+		compressionPreset.maxWidth = null;
 	}
 
-	return plan;
+	return {
+		outputFormat,
+		compressionPreset,
+		supportsCompressionPresets
+	};
 }
 
 export function makeOutputName(originalName: string, outputType: OutputType): string {

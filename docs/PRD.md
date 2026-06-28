@@ -163,9 +163,13 @@ After the first visit, users should be able to:
 - Compress images offline
 - Download results offline
 
-### 8.8 Local History
+### 8.8 Deferred Local History
 
-The app should save recent compression jobs locally.
+Local history is deferred until it has an active product Interface. The current MVP keeps
+completed jobs in the active batch and lets users download individual files or a ZIP before
+clearing the batch.
+
+When local history is added, the app should save recent compression jobs locally.
 
 A job should include:
 
@@ -271,7 +275,7 @@ Worker thread:
 
 ### Local Storage
 
-Use IndexedDB for:
+Future local history should use IndexedDB for:
 
 - Job history
 - Compressed output blobs
@@ -299,7 +303,6 @@ src/
     ImageResultCard.svelte
     ImagePreview.svelte
     DownloadButton.svelte
-    HistoryPanel.svelte
 
   workers/
     compressor.worker.ts
@@ -307,7 +310,6 @@ src/
   lib/
     compress.ts
     presets.ts
-    db.ts
     files.ts
     format.ts
     zip.ts

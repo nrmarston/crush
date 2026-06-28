@@ -1,39 +1,30 @@
 <script lang="ts">
-	import type { CompressionStatus } from '$lib/types';
-
-	type PreviewStatus = 'reading' | CompressionStatus;
+	import {
+		EVEN_VISUAL_COMPARISON_SPLIT,
+		createVisualComparisonResetKey,
+		shouldResetVisualComparisonPosition
+	} from './visual-comparison';
 
 	type Props = {
-		originalUrl?: string;
-		outputUrl?: string;
+		originalUrl: string;
+		outputUrl: string;
 		imageName: string;
-		status: PreviewStatus;
-		statusLabel: string;
-		width?: number;
-		height?: number;
 	};
 
-	let { originalUrl, outputUrl, imageName, status, statusLabel, width, height } =
-		$props<Props>();
+	let { originalUrl, outputUrl, imageName } = $props<Props>();
 
-	let position = $state(50);
+	let position = $state(EVEN_VISUAL_COMPARISON_SPLIT);
 	let previousResetKey = $state('');
 
-	const aspectRatio = $derived(width && height ? `${width} / ${height}` : '1 / 1');
-	const comparisonMaxWidth = $derived(
-		width && height ? `${Math.round((520 * width) / height)}px` : '520px'
-	);
-	const comparisonStyle = $derived(
-		`--reveal: ${position}%; --comparison-max-width: ${comparisonMaxWidth}; aspect-ratio: ${aspectRatio};`
-	);
-	const resetKey = $derived(`${originalUrl ?? ''}|${outputUrl ?? ''}|${imageName}`);
+	const comparisonStyle = $derived(`--reveal: ${position}%;`);
+	const resetKey = $derived(createVisualComparisonResetKey({ originalUrl, outputUrl, imageName }));
 
 	$effect(() => {
-		if (resetKey === previousResetKey) {
+		if (!shouldResetVisualComparisonPosition(previousResetKey, resetKey)) {
 			return;
 		}
 
-		position = 50;
+		position = EVEN_VISUAL_COMPARISON_SPLIT;
 		previousResetKey = resetKey;
 	});
 
@@ -42,70 +33,35 @@
 	}
 </script>
 
-<div class="visual-comparison">
-	<div class="comparison-frame" style={comparisonStyle}>
-		{#if originalUrl}
-			<img
-				class="comparison-image"
-				src={originalUrl}
-				alt={`Original preview for ${imageName}`}
-			/>
-		{:else}
-			<div class="preview-fallback">No preview</div>
-		{/if}
+<div class="visual-comparison" style={comparisonStyle}>
+	<img class="comparison-image" src={originalUrl} alt={`Original preview for ${imageName}`} />
 
-		{#if outputUrl}
-			<div class="compressed-layer" aria-hidden="true">
-				<img class="comparison-image" src={outputUrl} alt="" />
-			</div>
-			<div class="comparison-labels" aria-hidden="true">
-				<span>Original</span>
-				<span>Compressed</span>
-			</div>
-			<div class="comparison-divider" aria-hidden="true"></div>
-			<input
-				class="comparison-range"
-				type="range"
-				min="0"
-				max="100"
-				value={position}
-				aria-label={`Comparison position for ${imageName}`}
-				aria-valuetext={`${Math.round(position)}% original shown`}
-				oninput={handleInput}
-			/>
-		{:else if originalUrl}
-			<div class="preview-status" class:failed={status === 'failed'}>{statusLabel}</div>
-		{/if}
+	<div class="compressed-layer" aria-hidden="true">
+		<img class="comparison-image" src={outputUrl} alt="" />
 	</div>
+	<div class="comparison-labels" aria-hidden="true">
+		<span>Original</span>
+		<span>Compressed</span>
+	</div>
+	<div class="comparison-divider" aria-hidden="true"></div>
+	<input
+		class="comparison-range"
+		type="range"
+		min="0"
+		max="100"
+		value={position}
+		aria-label={`Comparison position for ${imageName}`}
+		aria-valuetext={`${Math.round(position)}% original shown`}
+		oninput={handleInput}
+	/>
 </div>
 
 <style>
 	.visual-comparison {
+		position: absolute;
+		inset: 0;
 		min-width: 0;
-	}
-
-	.comparison-frame {
-		position: relative;
-		display: grid;
-		place-items: center;
-		width: min(100%, var(--comparison-max-width));
-		max-height: 520px;
-		margin-inline: auto;
 		overflow: hidden;
-		border: 1px solid var(--color-line);
-		border-radius: var(--radius-md);
-		background:
-			linear-gradient(45deg, var(--color-checker) 25%, transparent 25%),
-			linear-gradient(-45deg, var(--color-checker) 25%, transparent 25%),
-			linear-gradient(45deg, transparent 75%, var(--color-checker) 75%),
-			linear-gradient(-45deg, transparent 75%, var(--color-checker) 75%),
-			var(--color-neutral);
-		background-position:
-			0 0,
-			0 8px,
-			8px -8px,
-			-8px 0;
-		background-size: 16px 16px;
 	}
 
 	.comparison-image {
@@ -129,9 +85,7 @@
 		pointer-events: none;
 	}
 
-	.comparison-labels span,
-	.preview-status,
-	.preview-fallback {
+	.comparison-labels span {
 		border: 1px solid var(--color-ink);
 		border-radius: var(--radius-full);
 		padding: 6px 9px;
@@ -140,9 +94,6 @@
 		font-size: 0.72rem;
 		font-weight: 700;
 		letter-spacing: 0.02em;
-	}
-
-	.comparison-labels span {
 		max-width: calc(50% - 6px);
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -184,37 +135,14 @@
 		opacity: 0;
 	}
 
-	.comparison-frame:focus-within {
+	.visual-comparison:focus-within {
 		outline: 2px solid var(--color-ink);
 		outline-offset: 2px;
 	}
 
-	.comparison-frame:focus-within .comparison-divider::after {
+	.visual-comparison:focus-within .comparison-divider::after {
 		box-shadow:
 			0 0 0 3px var(--color-primary-soft),
 			0 0 0 1px var(--color-ink);
-	}
-
-	.preview-status {
-		position: absolute;
-		right: 10px;
-		bottom: 10px;
-	}
-
-	.preview-status.failed {
-		background: var(--color-neutral);
-		color: var(--color-error);
-	}
-
-	.preview-fallback {
-		display: grid;
-		place-items: center;
-		width: 100%;
-		height: 100%;
-		border: 0;
-		border-radius: 0;
-		background: transparent;
-		color: var(--color-ink);
-		text-align: center;
 	}
 </style>

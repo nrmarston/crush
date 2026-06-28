@@ -15,7 +15,6 @@ never uploaded to a server.
 - Before and after file size comparison
 - Individual downloads and batch ZIP download
 - PWA service worker for offline reload after the first successful load
-- IndexedDB local history with clear history
 
 ## Install
 
@@ -74,4 +73,4 @@ vp test
 - PNG output uses lossless WASM optimization and keeps original dimensions.
 - Crop, watermark, animated PNG preservation, and custom codec controls are not included.
 - Large batches can still be limited by browser memory.
-- Local history depends on IndexedDB availability and browser storage limits.
+- Local history is deferred; completed jobs are available in the current batch only.
