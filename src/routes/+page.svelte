@@ -25,6 +25,7 @@
 	} from '$lib/output-format';
 	import { presets } from '$lib/presets';
 	import CompressionStatusBadge from '$lib/CompressionStatusBadge.svelte';
+	import ThemeToggle from '$lib/ThemeToggle.svelte';
 	import VisualComparison from '$lib/VisualComparison.svelte';
 	import type { CompressionPreset, PresetId } from '$lib/types';
 
@@ -317,7 +318,14 @@
 					<section class="settings-popover" aria-label="Compression settings">
 						<div class="popover-head">
 							<h2>Settings</h2>
-							<p>{labelForOutputType(outputType)} output, {selectedPreset.label.toLowerCase()} preset.</p>
+							<p>
+								{labelForOutputType(outputType)} output, {selectedPreset.label.toLowerCase()}
+								preset.
+							</p>
+						</div>
+						<div class="setting-block">
+							<h3>Appearance</h3>
+							<ThemeToggle />
 						</div>
 						<div class="setting-block">
 							<h3>Output</h3>
@@ -628,8 +636,6 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 12px;
-
-		/* I want the padding inline to  */
 	}
 
 	.topline {
@@ -657,6 +663,7 @@
 		width: 100%;
 		max-width: 80px;
 		height: auto;
+		filter: var(--brand-logo-filter);
 	}
 
 	.settings-menu {
@@ -681,6 +688,20 @@
 	}
 
 	.settings-popover {
+		--settings-control-hover-background: color-mix(
+			in srgb,
+			var(--color-primary-soft) 62%,
+			var(--color-neutral)
+		);
+		--settings-control-selected-background: var(--color-ink);
+		--settings-control-selected-border: var(--color-ink);
+		--settings-control-selected-color: var(--color-neutral);
+		--settings-icon-tile-background: color-mix(
+			in srgb,
+			var(--color-primary) 22%,
+			var(--color-neutral)
+		);
+
 		position: absolute;
 		top: calc(100% + 12px);
 		right: 0;
@@ -691,8 +712,15 @@
 		border-radius: var(--radius-md);
 		padding: 18px;
 		background: var(--color-neutral);
-		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.12);
+		box-shadow: var(--shadow-popover);
 		transform-origin: top right;
+	}
+
+	:global(html[data-theme='dark']) .settings-popover {
+		--settings-control-hover-background: rgb(255 255 255 / 0.1);
+		--settings-control-selected-background: rgb(255 255 255 / 0.15);
+		--settings-control-selected-border: rgb(255 255 255 / 0.24);
+		--settings-control-selected-color: var(--color-ink);
 	}
 
 	.settings-popover::before {
@@ -839,7 +867,7 @@
 		border-radius: var(--radius-md);
 		padding: 28px;
 		background: var(--color-neutral);
-		box-shadow: 0 24px 70px rgba(0, 0, 0, 0.08);
+		box-shadow: var(--shadow-card);
 	}
 
 	.file-input {
@@ -1280,6 +1308,7 @@
 	.row-download {
 		border-color: var(--color-primary);
 		background: var(--color-primary);
+		color: var(--color-on-primary);
 	}
 
 	.preview-panel {
@@ -1353,9 +1382,9 @@
 
 	.segmented button.selected,
 	.preset-list button.selected {
-		border-color: var(--color-ink);
-		background: var(--color-ink);
-		color: var(--color-neutral);
+		border-color: var(--settings-control-selected-border);
+		background: var(--settings-control-selected-background);
+		color: var(--settings-control-selected-color);
 	}
 
 	.preset-list {
@@ -1382,7 +1411,7 @@
 		height: 34px;
 		place-items: center;
 		border-radius: var(--radius-sm);
-		background: color-mix(in srgb, var(--color-primary) 22%, var(--color-neutral));
+		background: var(--settings-icon-tile-background);
 		color: var(--color-ink);
 		font-size: 1.08rem;
 		line-height: 1;
@@ -1410,12 +1439,8 @@
 		line-height: 1.35;
 	}
 
-	.preset-list button.selected .preset-icon {
-		background: var(--color-primary);
-	}
-
 	.preset-list button.selected small {
-		color: var(--color-neutral);
+		color: var(--settings-control-selected-color);
 		opacity: 0.72;
 	}
 
@@ -1482,6 +1507,17 @@
 		.row-download:hover {
 			background: var(--color-primary-soft);
 			transform: translateY(-1px);
+		}
+
+		.settings-popover button:hover:not(:disabled) {
+			background: var(--settings-control-hover-background);
+		}
+
+		.settings-popover .segmented button.selected:hover:not(:disabled),
+		.settings-popover .preset-list button.selected:hover:not(:disabled) {
+			border-color: var(--settings-control-selected-border);
+			background: var(--settings-control-selected-background);
+			color: var(--settings-control-selected-color);
 		}
 
 		.file-row:hover {

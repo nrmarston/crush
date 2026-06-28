@@ -229,6 +229,9 @@ importers:
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
+      svelte-themes:
+        specifier: ^2.0.10
+        version: 2.0.10(svelte@5.56.4)
     devDependencies:
       '@sveltejs/adapter-static':
         specifier: ^3.0.10
@@ -2911,6 +2914,11 @@ packages:
     peerDependencies:
       svelte: ^4.0.0 || ^5.0.0-next.0
       typescript: '>=5.0.0'
+
+  svelte-themes@2.0.10:
+    resolution: {integrity: sha512-PlUXhJTm29o45DKi7l/iCvrjaHLXsy/HGmVR4RL4VnUwp86YZpTehPK5F5h8zk3oG7V0QFFR9BpsxPV+i40IoA==}
+    peerDependencies:
+      svelte: ^4.0.0 || ^5.0.0
 
   svelte@5.56.4:
     resolution: {integrity: sha512-/d0QHehmRuJW8gVz395MTkPcPozxzdjBMBE8oEYGz8O3b9KTMzzQ9ZHJQLuFKOHOPQbU6kx/X4iid/EBBzH7iw==}
@@ -5763,6 +5771,10 @@ snapshots:
       typescript: 6.0.3
     transitivePeerDependencies:
       - picomatch
+
+  svelte-themes@2.0.10(svelte@5.56.4):
+    dependencies:
+      svelte: 5.56.4
 
   svelte@5.56.4:
     dependencies:

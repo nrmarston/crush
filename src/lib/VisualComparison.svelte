@@ -95,10 +95,10 @@
 		border: 1px solid var(--color-line);
 		border-radius: var(--radius-md);
 		background:
-			linear-gradient(45deg, rgba(0, 0, 0, 0.04) 25%, transparent 25%),
-			linear-gradient(-45deg, rgba(0, 0, 0, 0.04) 25%, transparent 25%),
-			linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.04) 75%),
-			linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.04) 75%),
+			linear-gradient(45deg, var(--color-checker) 25%, transparent 25%),
+			linear-gradient(-45deg, var(--color-checker) 25%, transparent 25%),
+			linear-gradient(45deg, transparent 75%, var(--color-checker) 75%),
+			linear-gradient(-45deg, transparent 75%, var(--color-checker) 75%),
 			var(--color-neutral);
 		background-position:
 			0 0,

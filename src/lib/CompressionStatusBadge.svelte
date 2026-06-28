@@ -26,9 +26,9 @@
 	}
 
 	.status-badge.complete {
-		border-color: #166534;
-		background: #dcfce7;
-		color: #166534;
+		border-color: var(--color-success);
+		background: var(--color-success-soft);
+		color: var(--color-success);
 	}
 
 	.status-badge.failed {
