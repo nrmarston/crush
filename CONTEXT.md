@@ -43,6 +43,7 @@ _Avoid_: Upload progress
 ## Relationships
 
 - A compression job has exactly one **Output Format**
+- A compression job validates its file as a **Static Image** when compression runs, even if the **Batch Workspace** already read the file for preview
 - **Compression Progress** never means file transfer to a server
 - Crush starts with a quiet centered intake surface before there is a **Batch Workspace**
 - A **Batch Workspace** uses the available screen space for compact batch controls and one focused **Visual Comparison**
@@ -66,6 +67,7 @@ _Avoid_: Upload progress
 - A **Visual Comparison** starts with original on the left and compressed on the right
 - A **Visual Comparison** uses the image's aspect ratio rather than a square thumbnail frame
 - A **Visual Comparison** frame uses the original decoded dimensions when output dimensions differ
+- Completed result dimensions describe the generated output dimensions, not the **Visual Comparison** frame
 - A result preview keeps the same frame before and after a **Visual Comparison** becomes available
 - Before a completed result is available, the result preview may show the active original image and status in the same frame
 - A **Visual Comparison** is about visible quality, not whether output dimensions changed
@@ -76,9 +78,13 @@ _Avoid_: Upload progress
 - **Lossless PNG Optimization** returns the original PNG bytes when a PNG input cannot be made smaller
 - **Lossless PNG Optimization** may strip non-visual metadata, but must preserve visual and color correctness
 - **Lossless PNG Optimization** does not use quality or resizing presets
+- AVIF, WebP, and JPEG **Output Formats** may downscale to a preset maximum width while preserving aspect ratio
+- AVIF, WebP, and JPEG **Output Formats** never upscale smaller images
 - **Already Optimized** applies only to PNG inputs processed with **Lossless PNG Optimization**
 - A failed **Lossless PNG Optimization** does not silently fall back to unoptimized PNG output
 - Crush supports **Static Image** compression; animated PNGs are outside **Lossless PNG Optimization**
+- JPEG **Output Format** flattens transparent pixels onto a white background
+- Compression fails when the browser reports an output MIME type that conflicts with the requested **Output Format**
 
 ## Example dialogue
 
@@ -86,14 +92,24 @@ _Avoid_: Upload progress
 > **Domain expert:** "No — PNG is a fourth **Output Format** alongside AVIF, WebP, and JPEG."
 > **Dev:** "Can Smallest File shrink a PNG's dimensions?"
 > **Domain expert:** "No — **Lossless PNG Optimization** preserves the decoded dimensions."
+> **Dev:** "Can Smallest File shrink AVIF, WebP, or JPEG dimensions?"
+> **Domain expert:** "Yes — those **Output Formats** may downscale to the preset maximum width, but they never upscale smaller images."
 > **Dev:** "What if a PNG input is already smaller than the optimized output?"
 > **Domain expert:** "Return the original PNG bytes and show **Already Optimized**; optimization should never make a PNG input worse."
 > **Dev:** "Should an animated PNG be optimized as a PNG?"
 > **Domain expert:** "No — Crush is for **Static Image** assets, so animated PNGs should not be silently changed."
+> **Dev:** "If the batch preview already accepted the file, can compression skip **Static Image** checks?"
+> **Domain expert:** "No — compression must still verify the file is a **Static Image** before producing output."
 > **Dev:** "If the PNG optimizer errors, should we emit a normal canvas PNG?"
 > **Domain expert:** "No — report the file failure instead of silently weakening **Lossless PNG Optimization**."
+> **Dev:** "What should happen to transparent pixels when the **Output Format** is JPEG?"
+> **Domain expert:** "JPEG output uses a white background because JPEG cannot preserve transparency."
+> **Dev:** "If the browser gives us WebP bytes after the user selected AVIF, should we keep them?"
+> **Domain expert:** "No — fail compression rather than producing a file whose contents conflict with the selected **Output Format**."
 > **Dev:** "Should the before/after slider reveal dimension changes?"
 > **Domain expert:** "No — a **Visual Comparison** compares appearance at matched display size; dimensions stay in the result metrics."
+> **Dev:** "When an output is resized, do result dimensions show the original image size?"
+> **Domain expert:** "No — completed result dimensions describe the generated output; the **Visual Comparison** frame can still use original dimensions."
 > **Dev:** "Which side is before?"
 > **Domain expert:** "Original is left, compressed is right, and the comparison opens at an even split."
 > **Dev:** "When a batch has many completed images, do they all show full comparisons?"
