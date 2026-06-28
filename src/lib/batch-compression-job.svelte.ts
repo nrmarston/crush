@@ -41,6 +41,8 @@ export type BatchCompressionJobRow = {
 	statusLabel: string;
 	details: string;
 	thumbnailUrl?: string;
+	thumbnailWidth?: number;
+	thumbnailHeight?: number;
 	progress: number;
 	showProgress: boolean;
 	progressLabel: string;
@@ -66,6 +68,10 @@ export type BatchCompressionJobPreview = {
 		originalUrl: string;
 		outputUrl: string;
 		imageName: string;
+		originalWidth?: number;
+		originalHeight?: number;
+		outputWidth?: number;
+		outputHeight?: number;
 	};
 	download?: BatchCompressionJobDownload;
 };
@@ -78,6 +84,8 @@ export type BatchWorkspaceIntake = {
 	title: string;
 	copy: string;
 	thumbnailUrl?: string;
+	thumbnailWidth?: number;
+	thumbnailHeight?: number;
 	progress: number;
 	showProgress: boolean;
 	isCompact: boolean;
@@ -724,6 +732,8 @@ function createBatchWorkspaceIntake(
 		title: titleForBatchWorkspaceIntake(input, itemCount),
 		copy: copyForBatchWorkspaceIntake(input, featuredRow, itemCount),
 		thumbnailUrl: input.featuredItem?.originalUrl,
+		thumbnailWidth: input.featuredItem?.originalWidth,
+		thumbnailHeight: input.featuredItem?.originalHeight,
 		progress: input.featuredItem?.progress ?? 0,
 		showProgress: input.isBusy,
 		isCompact: itemCount > 0,
@@ -869,6 +879,8 @@ function createBatchCompressionJobRow(
 		statusLabel: labelForBatchCompressionJobItemStatus(item.status),
 		details: detailsForBatchCompressionJobItem(item),
 		thumbnailUrl: item.originalUrl,
+		thumbnailWidth: item.originalWidth,
+		thumbnailHeight: item.originalHeight,
 		progress: item.progress,
 		showProgress: item.status !== 'failed' && item.status !== 'complete',
 		progressLabel: `Compression progress for ${item.originalName}`,
@@ -891,7 +903,11 @@ function createBatchCompressionJobPreview(
 			? {
 					originalUrl: item.originalUrl,
 					outputUrl: item.outputUrl,
-					imageName: item.originalName
+					imageName: item.originalName,
+					originalWidth: item.originalWidth,
+					originalHeight: item.originalHeight,
+					outputWidth: item.result.width,
+					outputHeight: item.result.height
 				}
 			: undefined;
 

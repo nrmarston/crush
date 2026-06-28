@@ -42,6 +42,10 @@
 						originalUrl={preview.comparison.originalUrl}
 						outputUrl={preview.comparison.outputUrl}
 						imageName={preview.comparison.imageName}
+						originalWidth={preview.comparison.originalWidth}
+						originalHeight={preview.comparison.originalHeight}
+						outputWidth={preview.comparison.outputWidth}
+						outputHeight={preview.comparison.outputHeight}
 					/>
 				{/key}
 			{:else if preview.originalUrl}
@@ -49,6 +53,8 @@
 					class="preview-image"
 					src={preview.originalUrl}
 					alt={`Original preview for ${preview.title}`}
+					width={preview.frame.width}
+					height={preview.frame.height}
 				/>
 				<div class={['preview-status', { failed: preview.status === 'failed' }]}>
 					{preview.statusLabel}
@@ -126,8 +132,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 40px;
-		min-height: 40px;
+		width: 44px;
+		min-height: 44px;
 		border: 1px solid var(--color-primary);
 		border-radius: var(--radius-full);
 		padding: 0;
@@ -139,6 +145,7 @@
 		letter-spacing: 0.02em;
 		line-height: 1.35;
 		text-decoration: none;
+		touch-action: manipulation;
 		cursor: pointer;
 		transition:
 			background 150ms var(--ease-out),

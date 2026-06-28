@@ -64,6 +64,7 @@
 	}
 
 	:global(html[data-theme='dark']) {
+		color-scheme: dark;
 		--color-primary: #ff8fdd;
 		--color-primary-soft: #4a243f;
 		--color-ink: #f7f7f7;
@@ -112,6 +113,7 @@
 	:global(button),
 	:global(a) {
 		-webkit-tap-highlight-color: transparent;
+		touch-action: manipulation;
 	}
 
 	:global(.skip-link) {
@@ -121,6 +123,7 @@
 		z-index: 1000;
 		border: 1px solid var(--color-ink);
 		border-radius: var(--radius-full);
+		min-height: 44px;
 		padding: 10px 14px;
 		background: var(--color-neutral);
 		color: var(--color-ink);

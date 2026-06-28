@@ -28,7 +28,7 @@
 	<header class="about-nav">
 		<nav class="about-nav-inner" aria-label="Primary">
 			<a class="brand" href="/">
-				<img src="/crush-logo.svg" alt="Crush" />
+				<img src="/crush-logo.svg" alt="Crush" width="101" height="33" />
 			</a>
 			<a class="app-link" href="/">Open app</a>
 		</nav>
@@ -113,7 +113,7 @@
 	}
 
 	.about-nav {
-		height: 40px;
+		height: 44px;
 		padding-inline: 1rem;
 	}
 
@@ -128,6 +128,7 @@
 	.brand {
 		display: inline-flex;
 		align-items: center;
+		min-height: 44px;
 	}
 
 	.brand img {
@@ -143,7 +144,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		min-height: 40px;
+		min-height: 44px;
 		border: 1px solid var(--color-ink);
 		border-radius: var(--radius-full);
 		padding: 0 16px;
@@ -152,6 +153,7 @@
 		font-weight: 700;
 		line-height: 1.35;
 		text-decoration: none;
+		touch-action: manipulation;
 	}
 
 	.about-hero {
@@ -262,6 +264,12 @@
 	.primary-link:focus-visible {
 		outline: 2px solid var(--color-ink);
 		outline-offset: 3px;
+	}
+
+	.brand:focus-visible {
+		border-radius: var(--radius-sm);
+		outline: 2px solid var(--color-ink);
+		outline-offset: 5px;
 	}
 
 	@media (hover: hover) and (pointer: fine) {

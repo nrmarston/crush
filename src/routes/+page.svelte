@@ -236,7 +236,7 @@
 	<header class="topline">
 		<nav class="nav-container" aria-label="Primary">
 			<a class="brand" href="/">
-				<img src="/crush-logo.svg" alt="Crush" />
+				<img src="/crush-logo.svg" alt="Crush" width="101" height="33" />
 			</a>
 			<div class="nav-actions">
 				<a class="nav-link" href="/about">About</a>
@@ -256,10 +256,10 @@
 						<section
 							id="compression-settings"
 							class="settings-popover"
-							aria-label="Compression settings"
+							aria-labelledby="compression-settings-title"
 						>
 							<div class="popover-head">
-								<h2>Settings</h2>
+								<h2 id="compression-settings-title">Settings</h2>
 								<p>
 									{compressionPlan.outputFormat.label} output, {selectedPreset.label.toLowerCase()}
 									preset.
@@ -271,7 +271,7 @@
 							</div>
 							<div class="setting-block">
 								<h3>Output</h3>
-								<div class="segmented" aria-label="Output format">
+								<div class="segmented" role="group" aria-label="Output format">
 									{#each OUTPUT_FORMATS as format (format.type)}
 										<button
 											type="button"
@@ -287,7 +287,7 @@
 							</div>
 							<div class="setting-block">
 								<h3>Compression</h3>
-								<div class="preset-list" aria-label="Compression preset">
+								<div class="preset-list" role="group" aria-label="Compression preset">
 									{#each presets as preset (preset.id)}
 										<button
 											type="button"
@@ -326,6 +326,8 @@
 					bind:this={fileInput}
 					class="file-input"
 					type="file"
+					name="images"
+					aria-label="Choose images"
 					hidden
 					multiple
 					accept="image/jpeg,image/png,image/webp"
@@ -354,7 +356,12 @@
 					>
 						<span class="drop-media" aria-hidden="true">
 							{#if workspace.intake.thumbnailUrl}
-								<img src={workspace.intake.thumbnailUrl} alt="" />
+								<img
+									src={workspace.intake.thumbnailUrl}
+									alt=""
+									width={workspace.intake.thumbnailWidth}
+									height={workspace.intake.thumbnailHeight}
+								/>
 							{:else}
 								<i class="ph ph-images-square drop-icon"></i>
 							{/if}
@@ -434,7 +441,6 @@
 							}
 						]}
 						aria-label="Compression progress"
-						aria-live="polite"
 						onscroll={updateFileListEdges}
 					>
 						{#each workspace.rows as row (row.id)}
@@ -461,7 +467,12 @@
 
 								<span class="file-thumb" aria-hidden="true">
 									{#if row.thumbnailUrl}
-										<img src={row.thumbnailUrl} alt="" />
+										<img
+											src={row.thumbnailUrl}
+											alt=""
+											width={row.thumbnailWidth}
+											height={row.thumbnailHeight}
+										/>
 									{:else}
 										<i class="ph ph-file-image"></i>
 									{/if}
@@ -492,7 +503,12 @@
 									{/if}
 
 									{#each row.notices as notice (notice.id)}
-										<span class={`row-notice ${notice.tone}`}>{notice.message}</span>
+										<span
+											class={`row-notice ${notice.tone}`}
+											role={notice.tone === 'error' ? 'alert' : 'status'}
+										>
+											{notice.message}
+										</span>
 									{/each}
 								</div>
 
@@ -560,12 +576,15 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 20px;
-		height: 40px;
+		height: 44px;
 	}
 
 	.brand {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
+		min-width: 44px;
+		min-height: 44px;
 		color: var(--color-ink);
 		font-size: 0.88rem;
 		font-weight: 700;
@@ -588,6 +607,11 @@
 	}
 
 	.nav-link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 44px;
+		min-height: 44px;
 		color: var(--color-muted);
 		font-size: 0.82rem;
 		font-weight: 700;
@@ -600,6 +624,12 @@
 		outline-offset: 3px;
 	}
 
+	.brand:focus-visible {
+		border-radius: var(--radius-sm);
+		outline: 2px solid var(--color-ink);
+		outline-offset: 5px;
+	}
+
 	.settings-menu {
 		position: relative;
 	}
@@ -607,8 +637,8 @@
 	.icon-button,
 	.row-download,
 	.row-remove {
-		width: 40px;
-		min-height: 40px;
+		width: 44px;
+		min-height: 44px;
 		border: 1px solid var(--color-line);
 		border-radius: var(--radius-full);
 		padding: 0;
@@ -766,7 +796,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		min-height: 40px;
+		min-height: 44px;
 		border: 1px solid var(--color-ink);
 		border-radius: var(--radius-full);
 		padding: 0 16px;
@@ -778,6 +808,7 @@
 		letter-spacing: 0.02em;
 		line-height: 1.35;
 		text-decoration: none;
+		touch-action: manipulation;
 		cursor: pointer;
 		transition:
 			background 150ms var(--ease-out),
@@ -1159,7 +1190,8 @@
 		inset: 0;
 		z-index: 1;
 		width: 100%;
-		min-height: 0;
+		height: 100%;
+		min-height: 44px;
 		border: 0;
 		border-radius: inherit;
 		padding: 0;
@@ -1246,8 +1278,8 @@
 
 	.row-download,
 	.row-remove {
-		width: 34px;
-		min-height: 34px;
+		width: 44px;
+		min-height: 44px;
 		padding: 0;
 		font-size: 0.95rem;
 	}

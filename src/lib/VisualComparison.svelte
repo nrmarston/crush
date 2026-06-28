@@ -5,9 +5,21 @@
 		originalUrl: string;
 		outputUrl: string;
 		imageName: string;
+		originalWidth?: number;
+		originalHeight?: number;
+		outputWidth?: number;
+		outputHeight?: number;
 	};
 
-	let { originalUrl, outputUrl, imageName }: Props = $props();
+	let {
+		originalUrl,
+		outputUrl,
+		imageName,
+		originalWidth,
+		originalHeight,
+		outputWidth,
+		outputHeight
+	}: Props = $props();
 
 	let position = $state(EVEN_VISUAL_COMPARISON_SPLIT);
 
@@ -17,10 +29,22 @@
 </script>
 
 <div class="visual-comparison" style:--reveal={`${position}%`}>
-	<img class="comparison-image" src={originalUrl} alt={`Original preview for ${imageName}`} />
+	<img
+		class="comparison-image"
+		src={originalUrl}
+		alt={`Original preview for ${imageName}`}
+		width={originalWidth}
+		height={originalHeight}
+	/>
 
 	<div class="compressed-layer" aria-hidden="true">
-		<img class="comparison-image" src={outputUrl} alt="" />
+		<img
+			class="comparison-image"
+			src={outputUrl}
+			alt=""
+			width={outputWidth}
+			height={outputHeight}
+		/>
 	</div>
 	<div class="comparison-labels" aria-hidden="true">
 		<span>Original</span>

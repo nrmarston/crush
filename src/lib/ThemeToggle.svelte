@@ -14,7 +14,7 @@
 	}
 </script>
 
-<div class="theme-toggle" aria-label="Appearance">
+<div class="theme-toggle" role="group" aria-label="Appearance">
 	{#each themeOptions as option (option.value)}
 		<button
 			type="button"
@@ -45,7 +45,7 @@
 	button {
 		display: inline-flex;
 		min-width: 0;
-		min-height: 40px;
+		min-height: 44px;
 		align-items: center;
 		justify-content: center;
 		gap: 6px;
@@ -58,6 +58,7 @@
 		font-size: 0.75rem;
 		font-weight: 700;
 		line-height: 1.2;
+		touch-action: manipulation;
 		cursor: pointer;
 		transition:
 			background 150ms cubic-bezier(0.23, 1, 0.32, 1),
