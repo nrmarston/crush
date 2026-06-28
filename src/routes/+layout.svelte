@@ -7,7 +7,7 @@
 
 	let { children } = $props();
 
-	const themes = ['light', 'dark'] as const;
+	const themes = ['light', 'dark', 'system'] as const;
 
 	onMount(async () => {
 		if (!pwaInfo) {

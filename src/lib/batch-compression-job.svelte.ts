@@ -29,6 +29,7 @@ export type BatchCompressionJobDownload = {
 };
 
 export type BatchCompressionJobItemNotice = {
+	id: 'item-error' | 'larger-output' | 'already-optimized';
 	tone: 'error' | 'warn' | 'neutral';
 	message: string;
 };
@@ -96,11 +97,13 @@ export type BatchWorkspaceSummary = {
 };
 
 export type BatchWorkspaceMetric = {
+	id: 'files' | 'before' | 'after' | 'savings' | 'compressed';
 	label: string;
 	value: string;
 };
 
 export type BatchWorkspaceNotice = {
+	id: 'queue-error' | 'zip-error';
 	tone: 'error';
 	message: string;
 };
@@ -189,7 +192,7 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		dependencies.clearProgressInterval ??
 		((timer: ProgressTimer) => window.clearInterval(timer as number));
 
-	let items = $state<BatchCompressionJobItem[]>([]);
+	let items = $state.raw<BatchCompressionJobItem[]>([]);
 	let isProcessing = $state(false);
 	let isZipping = $state(false);
 	let queueError = $state('');
@@ -802,22 +805,27 @@ function createBatchWorkspaceMetrics(input: BatchWorkspaceReadModelInput): Batch
 
 	return [
 		{
+			id: 'files',
 			label: 'Files',
 			value: String(input.completedCount)
 		},
 		{
+			id: 'before',
 			label: 'Before',
 			value: formatBytes(input.totalOriginalSize)
 		},
 		{
+			id: 'after',
 			label: 'After',
 			value: formatBytes(input.totalOutputSize)
 		},
 		{
+			id: 'savings',
 			label: 'Savings',
 			value: formatSavings(input.totalSavingsPercent)
 		},
 		{
+			id: 'compressed',
 			label: 'Compressed',
 			value: formatBytes(input.compressedBytes)
 		}
@@ -829,6 +837,7 @@ function createBatchWorkspaceNotices(input: BatchWorkspaceReadModelInput): Batch
 
 	if (input.queueError) {
 		notices.push({
+			id: 'queue-error',
 			tone: 'error',
 			message: input.queueError
 		});
@@ -836,6 +845,7 @@ function createBatchWorkspaceNotices(input: BatchWorkspaceReadModelInput): Batch
 
 	if (input.zipError) {
 		notices.push({
+			id: 'zip-error',
 			tone: 'error',
 			message: input.zipError
 		});
@@ -976,6 +986,7 @@ function noticesForBatchCompressionJobItem(
 
 	if (item.error) {
 		notices.push({
+			id: 'item-error',
 			tone: 'error',
 			message: item.error
 		});
@@ -983,6 +994,7 @@ function noticesForBatchCompressionJobItem(
 
 	if (isLargerBatchCompressionJobItem(item)) {
 		notices.push({
+			id: 'larger-output',
 			tone: 'warn',
 			message: 'The compressed file is larger than the original.'
 		});
@@ -990,6 +1002,7 @@ function noticesForBatchCompressionJobItem(
 
 	if (isAlreadyOptimizedBatchCompressionJobItem(item)) {
 		notices.push({
+			id: 'already-optimized',
 			tone: 'neutral',
 			message: 'Already optimized; original PNG kept.'
 		});

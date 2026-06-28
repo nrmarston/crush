@@ -15,10 +15,10 @@
 </script>
 
 <div class="theme-toggle" aria-label="Appearance">
-	{#each themeOptions as option}
+	{#each themeOptions as option (option.value)}
 		<button
 			type="button"
-			class:selected={selectedTheme === option.value}
+			class={{ selected: selectedTheme === option.value }}
 			aria-label={option.label}
 			aria-pressed={selectedTheme === option.value}
 			title={option.label}

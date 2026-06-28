@@ -1,9 +1,5 @@
 <script lang="ts">
-	import {
-		EVEN_VISUAL_COMPARISON_SPLIT,
-		createVisualComparisonResetKey,
-		shouldResetVisualComparisonPosition
-	} from './visual-comparison';
+	import { EVEN_VISUAL_COMPARISON_SPLIT } from './visual-comparison';
 
 	type Props = {
 		originalUrl: string;
@@ -11,29 +7,16 @@
 		imageName: string;
 	};
 
-	let { originalUrl, outputUrl, imageName } = $props<Props>();
+	let { originalUrl, outputUrl, imageName }: Props = $props();
 
 	let position = $state(EVEN_VISUAL_COMPARISON_SPLIT);
-	let previousResetKey = $state('');
-
-	const comparisonStyle = $derived(`--reveal: ${position}%;`);
-	const resetKey = $derived(createVisualComparisonResetKey({ originalUrl, outputUrl, imageName }));
-
-	$effect(() => {
-		if (!shouldResetVisualComparisonPosition(previousResetKey, resetKey)) {
-			return;
-		}
-
-		position = EVEN_VISUAL_COMPARISON_SPLIT;
-		previousResetKey = resetKey;
-	});
 
 	function handleInput(event: Event) {
 		position = Number((event.currentTarget as HTMLInputElement).value);
 	}
 </script>
 
-<div class="visual-comparison" style={comparisonStyle}>
+<div class="visual-comparison" style:--reveal={`${position}%`}>
 	<img class="comparison-image" src={originalUrl} alt={`Original preview for ${imageName}`} />
 
 	<div class="compressed-layer" aria-hidden="true">

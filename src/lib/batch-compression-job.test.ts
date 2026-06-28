@@ -406,6 +406,7 @@ describe('batch compression job', () => {
 
 		expect(optimizedHarness.job.rows[0].notices).toEqual([
 			{
+				id: 'already-optimized',
 				tone: 'neutral',
 				message: 'Already optimized; original PNG kept.'
 			}

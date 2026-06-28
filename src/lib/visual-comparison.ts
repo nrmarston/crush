@@ -9,10 +9,3 @@ export type VisualComparisonResetParts = {
 export function createVisualComparisonResetKey(parts: VisualComparisonResetParts): string {
 	return `${parts.originalUrl}|${parts.outputUrl}|${parts.imageName}`;
 }
-
-export function shouldResetVisualComparisonPosition(
-	previousResetKey: string,
-	nextResetKey: string
-): boolean {
-	return previousResetKey !== nextResetKey;
-}

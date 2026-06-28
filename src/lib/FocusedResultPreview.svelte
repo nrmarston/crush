@@ -2,12 +2,13 @@
 	import type { BatchCompressionJobPreview } from './batch-compression-job.svelte';
 	import CompressionStatusBadge from './CompressionStatusBadge.svelte';
 	import VisualComparison from './VisualComparison.svelte';
+	import { createVisualComparisonResetKey } from './visual-comparison';
 
 	type Props = {
 		preview: BatchCompressionJobPreview;
 	};
 
-	let { preview } = $props<Props>();
+	let { preview }: Props = $props();
 </script>
 
 <aside class="preview-panel" aria-label="Focused result preview">
@@ -36,18 +37,20 @@
 	<div class="focused-result-preview">
 		<div class="preview-frame" style={preview.frame.style}>
 			{#if preview.comparison}
-				<VisualComparison
-					originalUrl={preview.comparison.originalUrl}
-					outputUrl={preview.comparison.outputUrl}
-					imageName={preview.comparison.imageName}
-				/>
+				{#key createVisualComparisonResetKey(preview.comparison)}
+					<VisualComparison
+						originalUrl={preview.comparison.originalUrl}
+						outputUrl={preview.comparison.outputUrl}
+						imageName={preview.comparison.imageName}
+					/>
+				{/key}
 			{:else if preview.originalUrl}
 				<img
 					class="preview-image"
 					src={preview.originalUrl}
 					alt={`Original preview for ${preview.title}`}
 				/>
-				<div class="preview-status" class:failed={preview.status === 'failed'}>
+				<div class={['preview-status', { failed: preview.status === 'failed' }]}>
 					{preview.statusLabel}
 				</div>
 			{:else}

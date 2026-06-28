@@ -51,10 +51,6 @@
 		batchJob.dispose();
 	});
 
-	$effect(() => {
-		scheduleFileListEdgeUpdate(workspace.summary.itemCount, fileList);
-	});
-
 	function handleWindowKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			showSettings = false;
@@ -84,10 +80,8 @@
 		canScrollFileListDown = scrollTop < maxScrollTop - edgeTolerance;
 	}
 
-	function scheduleFileListEdgeUpdate(itemCount: number, list: HTMLElement | undefined) {
-		if (itemCount >= 0 || list) {
-			void tick().then(updateFileListEdges);
-		}
+	function scheduleFileListEdgeUpdate() {
+		void tick().then(updateFileListEdges);
 	}
 
 	function toggleSettings() {
@@ -141,14 +135,19 @@
 
 	async function queueFiles(fileList: FileList | File[]) {
 		await batchJob.queueFiles(fileList, activePreset);
+		scheduleFileListEdgeUpdate();
 	}
 
 	function removeItem(id: string) {
-		batchJob.removeItem(id);
+		if (batchJob.removeItem(id)) {
+			scheduleFileListEdgeUpdate();
+		}
 	}
 
 	function clearQueue() {
-		batchJob.clear();
+		if (batchJob.clear()) {
+			scheduleFileListEdgeUpdate();
+		}
 	}
 </script>
 
@@ -198,10 +197,10 @@
 						<div class="setting-block">
 							<h3>Output</h3>
 							<div class="segmented" aria-label="Output format">
-								{#each OUTPUT_FORMATS as format}
+								{#each OUTPUT_FORMATS as format (format.type)}
 									<button
 										type="button"
-										class:selected={outputType === format.type}
+										class={{ selected: outputType === format.type }}
 										aria-pressed={outputType === format.type}
 										disabled={workspace.isBusy}
 										onclick={() => setCompressionOutputType(format.type)}
@@ -214,10 +213,10 @@
 						<div class="setting-block">
 							<h3>Compression</h3>
 							<div class="preset-list" aria-label="Compression preset">
-								{#each presets as preset}
+								{#each presets as preset (preset.id)}
 									<button
 										type="button"
-										class:selected={presetId === preset.id}
+										class={{ selected: presetId === preset.id }}
 										aria-pressed={presetId === preset.id}
 										disabled={workspace.isBusy || !arePresetsEnabled}
 										onclick={() => setCompressionPreset(preset.id)}
@@ -239,184 +238,194 @@
 		</div>
 	</header>
 
-	<section class="stage" class:active={workspace.hasItems} aria-labelledby="app-title">
+	<section class={['stage', { active: workspace.hasItems }]} aria-labelledby="app-title">
 		<div class="intro">
 			<h1 id="app-title">Compress images</h1>
 			<p>Big images in. Small files out.</p>
 		</div>
 
-		<div class="workspace" class:active={workspace.hasItems}>
+		<div class={['workspace', { active: workspace.hasItems }]}>
 			<div class="flow-card">
-			<input
-				bind:this={fileInput}
-				class="file-input"
-				type="file"
-				hidden
-				multiple
-				accept="image/jpeg,image/png,image/webp"
-				onchange={handleInputChange}
-			/>
+				<input
+					bind:this={fileInput}
+					class="file-input"
+					type="file"
+					hidden
+					multiple
+					accept="image/jpeg,image/png,image/webp"
+					onchange={handleInputChange}
+				/>
 
-			<button
-				type="button"
-				class="drop-zone"
-				class:dragging={isDragging}
-				class:busy={workspace.intake.showProgress}
-				class:complete={workspace.intake.isComplete}
-				class:failed={workspace.intake.isFailed}
-				class:compact={workspace.intake.isCompact}
-				aria-busy={workspace.isBusy}
-				onclick={openFileBrowser}
-				ondragenter={handleDragEnter}
-				ondragover={handleDragOver}
-				ondragleave={handleDragLeave}
-				ondrop={handleDrop}
-			>
-				<span class="drop-media" aria-hidden="true">
-					{#if workspace.intake.thumbnailUrl}
-						<img src={workspace.intake.thumbnailUrl} alt="" />
-					{:else}
-						<i class="ph ph-images-square drop-icon"></i>
-					{/if}
-				</span>
-				<span class="drop-title">{workspace.intake.title}</span>
-				<span class="drop-copy">{workspace.intake.copy}</span>
-				{#if workspace.intake.showProgress}
-					<span class="progress-track" aria-hidden="true">
-						<span style={`width: ${workspace.intake.progress}%`}></span>
-					</span>
-				{/if}
-			</button>
-
-			{#if workspace.hasItems}
-				<div class="queue-head">
-					<div class="file-line">
-						<i class="ph ph-stack file-mark" aria-hidden="true"></i>
-						<span class="file-details">
-							<strong>{workspace.summary.title}</strong>
-							<span>{workspace.summary.status}</span>
-						</span>
-						<span class="file-size">{workspace.summary.fileSizeLimit}</span>
-					</div>
-
-					<div class="queue-actions">
-						<button
-							type="button"
-							disabled={!workspace.summary.canDownloadZip}
-							onclick={() => void batchJob.downloadResultZip()}
-						>
-							{workspace.summary.downloadZipLabel}
-						</button>
-						<button
-							type="button"
-							disabled={!workspace.summary.canClear}
-							onclick={clearQueue}
-						>
-							{workspace.summary.clearLabel}
-						</button>
-					</div>
-				</div>
-			{/if}
-
-			{#each workspace.notices as notice}
-				<p class={`notice ${notice.tone}`}>{notice.message}</p>
-			{/each}
-
-			{#if workspace.metrics.length > 0}
-				<div class="result-line" aria-live="polite">
-					{#each workspace.metrics as metric}
-						<div>
-							<span>{metric.label}</span>
-							<strong>{metric.value}</strong>
-						</div>
-					{/each}
-				</div>
-			{/if}
-
-			{#if workspace.hasItems}
-				<section
-					bind:this={fileList}
-					class="file-list"
-					class:fade-top={canScrollFileListUp}
-					class:fade-bottom={canScrollFileListDown}
-					aria-label="Compression progress"
-					aria-live="polite"
-					onscroll={updateFileListEdges}
+				<button
+					type="button"
+					class={[
+						'drop-zone',
+						{
+							dragging: isDragging,
+							busy: workspace.intake.showProgress,
+							complete: workspace.intake.isComplete,
+							failed: workspace.intake.isFailed,
+							compact: workspace.intake.isCompact
+						}
+					]}
+					aria-busy={workspace.isBusy}
+					onclick={openFileBrowser}
+					ondragenter={handleDragEnter}
+					ondragover={handleDragOver}
+					ondragleave={handleDragLeave}
+					ondrop={handleDrop}
 				>
-					{#each workspace.rows as row (row.id)}
-						<article
-							class="file-row {row.status}"
-							class:warning={row.hasWarning}
-							class:selectable={row.canFocus}
-							class:selected={row.isFocused}
-						>
-							{#if row.canFocus}
-								<button
-									type="button"
-									class="row-select-hit"
-									aria-label={row.focusLabel}
-									aria-pressed={row.isFocused}
-									onclick={() => batchJob.focusItem(row.id)}
-								></button>
-							{/if}
+					<span class="drop-media" aria-hidden="true">
+						{#if workspace.intake.thumbnailUrl}
+							<img src={workspace.intake.thumbnailUrl} alt="" />
+						{:else}
+							<i class="ph ph-images-square drop-icon"></i>
+						{/if}
+					</span>
+					<span class="drop-title">{workspace.intake.title}</span>
+					<span class="drop-copy">{workspace.intake.copy}</span>
+					{#if workspace.intake.showProgress}
+						<span class="progress-track" aria-hidden="true">
+							<span style:width={`${workspace.intake.progress}%`}></span>
+						</span>
+					{/if}
+				</button>
 
-							<span class="file-thumb" aria-hidden="true">
-								{#if row.thumbnailUrl}
-									<img src={row.thumbnailUrl} alt="" />
-								{:else}
-									<i class="ph ph-file-image"></i>
-								{/if}
+				{#if workspace.hasItems}
+					<div class="queue-head">
+						<div class="file-line">
+							<i class="ph ph-stack file-mark" aria-hidden="true"></i>
+							<span class="file-details">
+								<strong>{workspace.summary.title}</strong>
+								<span>{workspace.summary.status}</span>
 							</span>
+							<span class="file-size">{workspace.summary.fileSizeLimit}</span>
+						</div>
 
-							<div class="row-main">
-								<div class="row-title">
-									<strong>{row.title}</strong>
-									<CompressionStatusBadge
-										status={row.status}
-										label={row.statusLabel}
-									/>
+						<div class="queue-actions">
+							<button
+								type="button"
+								disabled={!workspace.summary.canDownloadZip}
+								onclick={() => void batchJob.downloadResultZip()}
+							>
+								{workspace.summary.downloadZipLabel}
+							</button>
+							<button
+								type="button"
+								disabled={!workspace.summary.canClear}
+								onclick={clearQueue}
+							>
+								{workspace.summary.clearLabel}
+							</button>
+						</div>
+					</div>
+				{/if}
+
+				{#each workspace.notices as notice (notice.id)}
+					<p class={`notice ${notice.tone}`}>{notice.message}</p>
+				{/each}
+
+				{#if workspace.metrics.length > 0}
+					<div class="result-line" aria-live="polite">
+						{#each workspace.metrics as metric (metric.id)}
+							<div>
+								<span>{metric.label}</span>
+								<strong>{metric.value}</strong>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				{#if workspace.hasItems}
+					<section
+						bind:this={fileList}
+						class={[
+							'file-list',
+							{
+								'fade-top': canScrollFileListUp,
+								'fade-bottom': canScrollFileListDown
+							}
+						]}
+						aria-label="Compression progress"
+						aria-live="polite"
+						onscroll={updateFileListEdges}
+					>
+						{#each workspace.rows as row (row.id)}
+							<article
+								class={[
+									'file-row',
+									row.status,
+									{
+										warning: row.hasWarning,
+										selectable: row.canFocus,
+										selected: row.isFocused
+									}
+								]}
+							>
+								{#if row.canFocus}
+									<button
+										type="button"
+										class="row-select-hit"
+										aria-label={row.focusLabel}
+										aria-pressed={row.isFocused}
+										onclick={() => batchJob.focusItem(row.id)}
+									></button>
+								{/if}
+
+								<span class="file-thumb" aria-hidden="true">
+									{#if row.thumbnailUrl}
+										<img src={row.thumbnailUrl} alt="" />
+									{:else}
+										<i class="ph ph-file-image"></i>
+									{/if}
+								</span>
+
+								<div class="row-main">
+									<div class="row-title">
+										<strong>{row.title}</strong>
+										<CompressionStatusBadge
+											status={row.status}
+											label={row.statusLabel}
+										/>
+									</div>
+									<span class="row-meta">{row.details}</span>
+
+									{#if row.showProgress}
+										<span class="row-progress" aria-label={row.progressLabel}>
+											<span style:width={`${row.progress}%`}></span>
+										</span>
+									{/if}
+
+									{#each row.notices as notice (notice.id)}
+										<span class={`row-notice ${notice.tone}`}>{notice.message}</span>
+									{/each}
 								</div>
-								<span class="row-meta">{row.details}</span>
 
-								{#if row.showProgress}
-									<span
-										class="row-progress"
-										aria-label={row.progressLabel}
+								<div class="row-actions">
+									{#if row.download}
+										<a
+											class="row-download"
+											href={row.download.url}
+											download={row.download.name}
+											aria-label={row.download.label}
+										>
+											<i class="ph ph-download-simple" aria-hidden="true"></i>
+										</a>
+									{/if}
+									<button
+										type="button"
+										class="row-remove"
+										disabled={!row.canRemove}
+										aria-label={row.removeLabel}
+										onclick={() => removeItem(row.id)}
 									>
-										<span style={`width: ${row.progress}%`}></span>
-									</span>
-								{/if}
-
-								{#each row.notices as notice}
-									<span class={`row-notice ${notice.tone}`}>{notice.message}</span>
-								{/each}
-							</div>
-
-							<div class="row-actions">
-								{#if row.download}
-									<a
-										class="row-download"
-										href={row.download.url}
-										download={row.download.name}
-										aria-label={row.download.label}
-									>
-										<i class="ph ph-download-simple" aria-hidden="true"></i>
-									</a>
-								{/if}
-								<button
-									type="button"
-									class="row-remove"
-									disabled={!row.canRemove}
-									aria-label={row.removeLabel}
-									onclick={() => removeItem(row.id)}
-								>
-									<i class="ph ph-x" aria-hidden="true"></i>
-								</button>
-							</div>
-						</article>
-					{/each}
-				</section>
-			{/if}
+										<i class="ph ph-x" aria-hidden="true"></i>
+									</button>
+								</div>
+							</article>
+						{/each}
+					</section>
+				{/if}
 			</div>
 
 			{#if workspace.hasItems && workspace.preview}
