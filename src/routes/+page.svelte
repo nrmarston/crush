@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import {
 		compressionSettings,
 		initializeCompressionSettings,
@@ -24,6 +24,8 @@
 		supportsCompressionPresets
 	} from '$lib/output-format';
 	import { presets } from '$lib/presets';
+	import CompressionStatusBadge from '$lib/CompressionStatusBadge.svelte';
+	import VisualComparison from '$lib/VisualComparison.svelte';
 	import type { CompressionPreset, PresetId } from '$lib/types';
 
 	const statusLabels: Record<BatchCompressionJobItemStatus, string> = {
@@ -41,9 +43,12 @@
 	};
 
 	let fileInput = $state<HTMLInputElement>();
+	let fileList = $state<HTMLElement>();
 	let settingsMenu = $state<HTMLElement>();
 	let isDragging = $state(false);
 	let showSettings = $state(false);
+	let canScrollFileListUp = $state(false);
+	let canScrollFileListDown = $state(false);
 
 	let dragDepth = 0;
 	const batchJob = createBatchCompressionJob();
@@ -59,6 +64,8 @@
 	);
 	const items = $derived(batchJob.items);
 	const completedItems = $derived(batchJob.completedItems);
+	const focusedItem = $derived(batchJob.focusedItem);
+	const previewItem = $derived(batchJob.previewItem);
 	const failedCount = $derived(batchJob.failedCount);
 	const isBusy = $derived(batchJob.isBusy);
 	const isZipping = $derived(batchJob.isZipping);
@@ -109,6 +116,10 @@
 		batchJob.dispose();
 	});
 
+	$effect(() => {
+		scheduleFileListEdgeUpdate(items.length, fileList);
+	});
+
 	function handleWindowKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			showSettings = false;
@@ -121,6 +132,27 @@
 		}
 
 		showSettings = false;
+	}
+
+	function updateFileListEdges() {
+		if (!fileList) {
+			canScrollFileListUp = false;
+			canScrollFileListDown = false;
+			return;
+		}
+
+		const maxScrollTop = Math.max(0, fileList.scrollHeight - fileList.clientHeight);
+		const scrollTop = Math.min(fileList.scrollTop, maxScrollTop);
+		const edgeTolerance = 1;
+
+		canScrollFileListUp = scrollTop > edgeTolerance;
+		canScrollFileListDown = scrollTop < maxScrollTop - edgeTolerance;
+	}
+
+	function scheduleFileListEdgeUpdate(itemCount: number, list: HTMLElement | undefined) {
+		if (itemCount >= 0 || list) {
+			void tick().then(updateFileListEdges);
+		}
 	}
 
 	function toggleSettings() {
@@ -188,6 +220,12 @@
 		batchJob.removeItem(id);
 	}
 
+	function focusItem(item: BatchCompressionJobItem) {
+		if (isCompleted(item)) {
+			batchJob.focusItem(item.id);
+		}
+	}
+
 	function clearQueue() {
 		batchJob.clear();
 	}
@@ -222,6 +260,14 @@
 		return labelForImageType(item.originalType);
 	}
 
+	function previewWidthFor(item: BatchCompressionJobItem): number | undefined {
+		return item.originalWidth ?? item.width;
+	}
+
+	function previewHeightFor(item: BatchCompressionJobItem): number | undefined {
+		return item.originalHeight ?? item.height;
+	}
+
 	function downloadBlob(blob: Blob, fileName: string) {
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement('a');
@@ -245,7 +291,11 @@
 	/>
 </svelte:head>
 
-<svelte:window onclick={handleWindowClick} onkeydown={handleWindowKeydown} />
+<svelte:window
+	onclick={handleWindowClick}
+	onkeydown={handleWindowKeydown}
+	onresize={updateFileListEdges}
+/>
 
 <main class="app-shell">
 	<header class="topline" aria-label="Primary navigation">
@@ -313,13 +363,14 @@
 		</div>
 	</header>
 
-	<section class="stage" aria-labelledby="app-title">
+	<section class="stage" class:active={items.length > 0} aria-labelledby="app-title">
 		<div class="intro">
 			<h1 id="app-title">Compress images</h1>
 			<p>Big images in. Small files out.</p>
 		</div>
 
-		<div class="flow-card">
+		<div class="workspace" class:active={items.length > 0}>
+			<div class="flow-card">
 			<input
 				bind:this={fileInput}
 				class="file-input"
@@ -337,6 +388,7 @@
 				class:busy={isBusy}
 				class:complete={completedItems.length > 0 && !isBusy}
 				class:failed={items.length > 0 && failedCount === items.length}
+				class:compact={items.length > 0}
 				aria-busy={isBusy}
 				onclick={openFileBrowser}
 				ondragenter={handleDragEnter}
@@ -420,9 +472,32 @@
 			{/if}
 
 			{#if items.length > 0}
-				<section class="file-list" aria-label="Compression progress" aria-live="polite">
+				<section
+					bind:this={fileList}
+					class="file-list"
+					class:fade-top={canScrollFileListUp}
+					class:fade-bottom={canScrollFileListDown}
+					aria-label="Compression progress"
+					aria-live="polite"
+					onscroll={updateFileListEdges}
+				>
 					{#each items as item (item.id)}
-						<article class="file-row {item.status}" class:warning={isLarger(item)}>
+						<article
+							class="file-row {item.status}"
+							class:warning={isLarger(item)}
+							class:selectable={isCompleted(item)}
+							class:selected={focusedItem?.id === item.id}
+						>
+							{#if isCompleted(item)}
+								<button
+									type="button"
+									class="row-select-hit"
+									aria-label={`Show ${item.originalName} in preview`}
+									aria-pressed={focusedItem?.id === item.id}
+									onclick={() => focusItem(item)}
+								></button>
+							{/if}
+
 							<span class="file-thumb" aria-hidden="true">
 								{#if item.originalUrl}
 									<img src={item.originalUrl} alt="" />
@@ -434,7 +509,10 @@
 							<div class="row-main">
 								<div class="row-title">
 									<strong>{item.originalName}</strong>
-									<span class="status-badge">{statusLabels[item.status]}</span>
+									<CompressionStatusBadge
+										status={item.status}
+										label={statusLabels[item.status]}
+									/>
 								</div>
 								<span class="row-meta">{detailsFor(item)}</span>
 
@@ -460,21 +538,6 @@
 								{/if}
 							</div>
 
-							<dl class="row-metrics">
-								<div>
-									<dt>Before</dt>
-									<dd>{formatBytes(item.originalSize)}</dd>
-								</div>
-								<div>
-									<dt>After</dt>
-									<dd>{isCompleted(item) ? formatBytes(item.result.outputSize) : '-'}</dd>
-								</div>
-								<div>
-									<dt>Savings</dt>
-									<dd>{isCompleted(item) ? formatSavings(item.result.savingsPercent) : '-'}</dd>
-								</div>
-							</dl>
-
 							<div class="row-actions">
 								{#if isCompleted(item)}
 									<a
@@ -499,6 +562,46 @@
 						</article>
 					{/each}
 				</section>
+			{/if}
+			</div>
+
+			{#if items.length > 0 && previewItem}
+				<aside class="preview-panel" aria-label="Focused result preview">
+					<div class="preview-head">
+						<div class="preview-title">
+							<span>Preview</span>
+							<h2>{previewItem.originalName}</h2>
+							<p>{detailsFor(previewItem)}</p>
+						</div>
+
+						<div class="preview-actions">
+							<CompressionStatusBadge
+								status={previewItem.status}
+								label={statusLabels[previewItem.status]}
+							/>
+							{#if isCompleted(previewItem)}
+								<a
+									class="row-download preview-download"
+									href={previewItem.outputUrl}
+									download={previewItem.result.outputName}
+									aria-label={`Download ${previewItem.result.outputName}`}
+								>
+									<i class="ph ph-download-simple" aria-hidden="true"></i>
+								</a>
+							{/if}
+						</div>
+					</div>
+
+					<VisualComparison
+						originalUrl={previewItem.originalUrl}
+						outputUrl={isCompleted(previewItem) ? previewItem.outputUrl : undefined}
+						imageName={previewItem.originalName}
+						status={previewItem.status}
+						statusLabel={statusLabels[previewItem.status]}
+						width={previewWidthFor(previewItem)}
+						height={previewHeightFor(previewItem)}
+					/>
+				</aside>
 			{/if}
 		</div>
 	</section>
@@ -620,6 +723,23 @@
 		padding-inline: 1rem;
 	}
 
+	.stage.active {
+		align-content: start;
+	}
+
+	.workspace {
+		display: grid;
+		width: min(760px, 100%);
+		gap: 22px;
+		align-items: start;
+	}
+
+	.workspace.active {
+		width: min(120rem, 100%);
+		grid-template-columns: minmax(360px, 760px) minmax(360px, 1fr);
+		gap: 24px;
+	}
+
 	.intro {
 		display: grid;
 		justify-items: center;
@@ -714,7 +834,7 @@
 
 	.flow-card {
 		display: grid;
-		width: min(760px, 100%);
+		width: 100%;
 		gap: 18px;
 		border-radius: var(--radius-md);
 		padding: 28px;
@@ -748,6 +868,21 @@
 		transform-origin: center;
 	}
 
+	.drop-zone.compact {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		min-height: 96px;
+		padding: 14px 16px;
+		text-align: center;
+	}
+
+	.drop-zone.compact.busy {
+		min-height: 118px;
+		padding-bottom: 34px;
+	}
+
 	.drop-zone.dragging {
 		border-color: var(--color-ink);
 		background: var(--color-primary-soft);
@@ -757,6 +892,11 @@
 	.drop-zone.complete {
 		border-color: var(--color-primary);
 		background: color-mix(in srgb, var(--color-primary) 15%, var(--color-neutral));
+	}
+
+	.drop-zone.compact.complete {
+		border-color: var(--color-line);
+		background: var(--color-neutral);
 	}
 
 	.drop-zone.failed {
@@ -775,6 +915,12 @@
 		background: color-mix(in srgb, var(--color-primary) 30%, var(--color-neutral));
 		transition: transform 180ms var(--ease-out);
 		transform-origin: center;
+	}
+
+	.drop-zone.compact .drop-media {
+		width: 44px;
+		border-radius: var(--radius-sm);
+		margin-bottom: 8px;
 	}
 
 	.drop-media img,
@@ -812,6 +958,15 @@
 		letter-spacing: 0.01em;
 	}
 
+	.drop-zone.compact .drop-title,
+	.drop-zone.compact .drop-copy {
+		max-width: none;
+	}
+
+	.drop-zone.compact .drop-copy {
+		margin-top: 2px;
+	}
+
 	.progress-track {
 		position: absolute;
 		right: 28px;
@@ -821,6 +976,12 @@
 		overflow: hidden;
 		border-radius: var(--radius-full);
 		background: var(--color-line);
+	}
+
+	.drop-zone.compact .progress-track {
+		right: 16px;
+		bottom: 16px;
+		left: 16px;
 	}
 
 	.progress-track span,
@@ -920,8 +1081,7 @@
 		gap: 4px;
 	}
 
-	.result-line span,
-	.row-metrics dt {
+	.result-line span {
 		color: var(--color-muted);
 		font-size: 0.66rem;
 		font-weight: 700;
@@ -929,8 +1089,7 @@
 		line-height: 1.35;
 	}
 
-	.result-line strong,
-	.row-metrics dd {
+	.result-line strong {
 		overflow-wrap: anywhere;
 		font-size: 0.95rem;
 		font-weight: 700;
@@ -938,17 +1097,51 @@
 	}
 
 	.file-list {
+		--file-list-fade-size: 24px;
+		--file-list-mask: linear-gradient(#000, #000);
+
 		display: grid;
 		max-height: min(430px, 42svh);
 		gap: 10px;
 		overflow-y: auto;
 		padding-right: 4px;
+		-webkit-mask-image: var(--file-list-mask);
+		mask-image: var(--file-list-mask);
 		scrollbar-width: thin;
 	}
 
+	.file-list.fade-top {
+		--file-list-mask: linear-gradient(
+			to bottom,
+			transparent,
+			#000 var(--file-list-fade-size),
+			#000 100%
+		);
+	}
+
+	.file-list.fade-bottom {
+		--file-list-mask: linear-gradient(
+			to bottom,
+			#000 0,
+			#000 calc(100% - var(--file-list-fade-size)),
+			transparent
+		);
+	}
+
+	.file-list.fade-top.fade-bottom {
+		--file-list-mask: linear-gradient(
+			to bottom,
+			transparent,
+			#000 var(--file-list-fade-size),
+			#000 calc(100% - var(--file-list-fade-size)),
+			transparent
+		);
+	}
+
 	.file-row {
+		position: relative;
 		display: grid;
-		grid-template-columns: 46px minmax(0, 1fr) minmax(190px, auto) auto;
+		grid-template-columns: 46px minmax(0, 1fr) auto;
 		gap: 12px;
 		align-items: center;
 		border: 1px solid var(--color-line);
@@ -975,6 +1168,32 @@
 
 	.file-row.warning {
 		border-color: var(--color-primary);
+	}
+
+	.file-row.selectable {
+		cursor: pointer;
+	}
+
+	.file-row.selected {
+		border-color: var(--color-ink);
+		box-shadow: inset 0 0 0 1px var(--color-ink);
+	}
+
+	.row-select-hit {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		width: 100%;
+		min-height: 0;
+		border: 0;
+		border-radius: inherit;
+		padding: 0;
+		background: transparent;
+	}
+
+	.row-select-hit:focus-visible {
+		outline: 2px solid var(--color-ink);
+		outline-offset: 3px;
 	}
 
 	.file-thumb {
@@ -1011,30 +1230,6 @@
 		white-space: nowrap;
 	}
 
-	.status-badge {
-		flex: 0 0 auto;
-		border: 1px solid var(--color-line);
-		border-radius: var(--radius-full);
-		padding: 4px 8px;
-		background: var(--color-surface);
-		color: var(--color-ink);
-		font-size: 0.66rem;
-		font-weight: 700;
-		line-height: 1.25;
-	}
-
-	.complete .status-badge {
-		border-color: var(--color-ink);
-		background: var(--color-ink);
-		color: var(--color-neutral);
-	}
-
-	.failed .status-badge {
-		border-color: var(--color-error);
-		background: var(--color-neutral);
-		color: var(--color-error);
-	}
-
 	.row-meta,
 	.row-notice {
 		color: var(--color-muted);
@@ -1065,27 +1260,13 @@
 		color: var(--color-ink);
 	}
 
-	.row-metrics {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 10px;
-		min-width: 190px;
-		margin: 0;
-	}
-
-	.row-metrics div {
-		min-width: 0;
-	}
-
-	.row-metrics dd {
-		margin: 3px 0 0;
-		font-size: 0.82rem;
-	}
-
 	.row-actions {
-		display: grid;
+		position: relative;
+		z-index: 2;
+		display: flex;
+		align-items: center;
 		gap: 8px;
-		justify-items: end;
+		justify-content: flex-end;
 	}
 
 	.row-download,
@@ -1099,6 +1280,65 @@
 	.row-download {
 		border-color: var(--color-primary);
 		background: var(--color-primary);
+	}
+
+	.preview-panel {
+		position: sticky;
+		top: 16px;
+		display: grid;
+		min-width: 0;
+		gap: 16px;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius-md);
+		padding: 18px;
+		background: var(--color-neutral);
+	}
+
+	.preview-head {
+		display: flex;
+		align-items: start;
+		justify-content: space-between;
+		gap: 16px;
+		border-bottom: 1px solid var(--color-line);
+		padding-bottom: 14px;
+	}
+
+	.preview-title {
+		display: grid;
+		min-width: 0;
+		gap: 4px;
+	}
+
+	.preview-title span {
+		color: var(--color-muted);
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		line-height: 1.35;
+	}
+
+	.preview-title h2 {
+		overflow-wrap: anywhere;
+		font-size: 1rem;
+	}
+
+	.preview-title p {
+		color: var(--color-muted);
+		font-size: 0.82rem;
+		line-height: 1.35;
+	}
+
+	.preview-actions {
+		display: flex;
+		flex: 0 0 auto;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 8px;
+	}
+
+	.preview-download {
+		width: 40px;
+		min-height: 40px;
 	}
 
 	.segmented {
@@ -1238,7 +1478,7 @@
 	}
 
 	@media (hover: hover) and (pointer: fine) {
-		button:hover:not(:disabled):not(.drop-zone),
+		button:hover:not(:disabled):not(.drop-zone):not(.row-select-hit),
 		.row-download:hover {
 			background: var(--color-primary-soft);
 			transform: translateY(-1px);
@@ -1250,7 +1490,7 @@
 		}
 	}
 
-	button:active:not(:disabled):not(.drop-zone),
+	button:active:not(:disabled):not(.drop-zone):not(.row-select-hit),
 	.row-download:active {
 		transform: scale(0.97);
 	}
@@ -1265,14 +1505,21 @@
 		}
 	}
 
+	@media (max-width: 1180px) {
+		.workspace.active {
+			width: min(760px, 100%);
+			grid-template-columns: 1fr;
+		}
+
+		.preview-panel {
+			position: static;
+			order: -1;
+		}
+	}
+
 	@media (max-width: 820px) {
 		.file-row {
 			grid-template-columns: 46px minmax(0, 1fr) auto;
-		}
-
-		.row-metrics {
-			grid-column: 2 / -1;
-			width: 100%;
 		}
 	}
 
@@ -1296,6 +1543,18 @@
 
 		.flow-card {
 			padding: 20px;
+		}
+
+		.preview-panel {
+			padding: 16px;
+		}
+
+		.preview-head {
+			display: grid;
+		}
+
+		.preview-actions {
+			justify-content: flex-start;
 		}
 
 		.drop-zone {
@@ -1333,6 +1592,8 @@
 		}
 
 		.file-list {
+			--file-list-mask: linear-gradient(#000, #000);
+
 			max-height: none;
 			overflow: visible;
 			padding-right: 0;
@@ -1352,10 +1613,6 @@
 			grid-column: 2;
 			display: flex;
 			justify-content: flex-start;
-		}
-
-		.row-metrics {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
 	}
 

@@ -103,15 +103,75 @@ describe('batch compression job', () => {
 			progress: 100,
 			originalUrl: 'blob:fake-1',
 			outputUrl: 'blob:fake-2',
+			originalWidth: 640,
+			originalHeight: 480,
 			width: 640,
 			height: 480
 		});
 		expect(harness.job.completedItems).toHaveLength(1);
+		expect(harness.job.focusedItem?.id).toBe('item-1');
+		expect(harness.job.previewItem?.id).toBe('item-1');
 		expect(harness.job.totalOriginalSize).toBe(1000);
 		expect(harness.job.totalOutputSize).toBe(400);
 		expect(harness.job.totalSavingsPercent).toBe(60);
 		expect(harness.job.compressedBytes).toBe(600);
 		expect(harness.job.isBusy).toBe(false);
+	});
+
+	it('follows the latest completed result until the user chooses one', async () => {
+		const harness = createHarness();
+		const hero = imageFile('hero.jpg', 'image/jpeg', 1000);
+		const badge = imageFile('badge.png', 'image/png', 800);
+		const product = imageFile('product.webp', 'image/webp', 700);
+
+		await harness.job.queueFiles([hero, badge], preset);
+		await flushAsyncWork();
+
+		expect(harness.job.focusedItem?.id).toBe('item-2');
+		expect(harness.job.focusItem('item-1')).toBe(true);
+		expect(harness.job.focusedItem?.id).toBe('item-1');
+
+		await harness.job.queueFiles([product], preset);
+		await flushAsyncWork();
+
+		expect(harness.job.focusedItem?.id).toBe('item-1');
+	});
+
+	it('falls back to the latest completed result when the focused result is removed', async () => {
+		const harness = createHarness();
+		const hero = imageFile('hero.jpg', 'image/jpeg', 1000);
+		const badge = imageFile('badge.png', 'image/png', 800);
+
+		await harness.job.queueFiles([hero, badge], preset);
+		await flushAsyncWork();
+
+		expect(harness.job.focusItem('item-1')).toBe(true);
+		expect(harness.job.removeItem('item-1')).toBe(true);
+
+		expect(harness.job.focusedItem?.id).toBe('item-2');
+		expect(harness.job.previewItem?.id).toBe('item-2');
+	});
+
+	it('does not focus active or failed items as completed results', async () => {
+		let resolveCompression: (result: CompressionResult) => void = () => {};
+		const pendingCompression = new Promise<CompressionResult>((resolve) => {
+			resolveCompression = resolve;
+		});
+		const harness = createHarness({
+			compress: vi.fn(() => pendingCompression)
+		});
+		const file = imageFile('hero.jpg', 'image/jpeg', 1000);
+
+		await harness.job.queueFiles([file], preset);
+
+		expect(harness.job.focusItem('item-1')).toBe(false);
+		expect(harness.job.focusedItem).toBeUndefined();
+		expect(harness.job.previewItem?.id).toBe('item-1');
+
+		resolveCompression(compressionResult('item-1', file, preset));
+		await flushAsyncWork();
+
+		expect(harness.job.focusItem('item-1')).toBe(true);
 	});
 
 	it('fails invalid files before creating previews or worker calls', async () => {
@@ -138,6 +198,7 @@ describe('batch compression job', () => {
 		expect(harness.compress).not.toHaveBeenCalled();
 		expect(harness.createdUrls).toEqual([]);
 		expect(harness.job.failedCount).toBe(1);
+		expect(harness.job.focusItem('item-1')).toBe(false);
 	});
 
 	it('keeps active items in the queue and revokes URLs when complete items are removed', async () => {

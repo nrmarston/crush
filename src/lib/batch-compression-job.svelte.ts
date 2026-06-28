@@ -23,6 +23,8 @@ export type BatchCompressionJobItem = {
 	originalName: string;
 	originalType: string;
 	originalSize: number;
+	originalWidth?: number;
+	originalHeight?: number;
 	width?: number;
 	height?: number;
 	status: BatchCompressionJobItemStatus;
@@ -74,10 +76,13 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 	let isZipping = $state(false);
 	let queueError = $state('');
 	let zipError = $state('');
+	let focusedResultId = $state<string | undefined>();
+	let isFocusedResultManual = $state(false);
 	let isDisposed = false;
 
 	const progressTimers = new Map<string, ProgressTimer>();
 	const completedItems = $derived(items.filter(isCompletedBatchCompressionJobItem));
+	const focusedItem = $derived(resolveFocusedItem());
 	const failedCount = $derived(items.filter((item) => item.status === 'failed').length);
 	const isBusy = $derived(
 		isProcessing ||
@@ -101,6 +106,7 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 			[...items].reverse().find((item) => item.originalUrl) ??
 			items[0]
 	);
+	const previewItem = $derived(focusedItem ?? featuredItem);
 
 	async function queueFiles(fileList: FileList | File[], preset: CompressionPreset) {
 		if (isDisposed) {
@@ -172,6 +178,10 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		clearItemProgress(id);
 		revokeItemUrls(item);
 		items = items.filter((candidate) => candidate.id !== id);
+		if (focusedResultId === id) {
+			isFocusedResultManual = false;
+			focusedResultId = latestCompletedItem()?.id;
+		}
 		queueError = '';
 		zipError = '';
 
@@ -186,6 +196,8 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		clearAllProgress();
 		revokeQueueUrls(items);
 		items = [];
+		focusedResultId = undefined;
+		isFocusedResultManual = false;
 		queueError = '';
 		zipError = '';
 
@@ -197,6 +209,21 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		clearAllProgress();
 		revokeQueueUrls(items);
 		items = [];
+		focusedResultId = undefined;
+		isFocusedResultManual = false;
+	}
+
+	function focusItem(id: string): boolean {
+		const item = items.find((candidate) => candidate.id === id);
+
+		if (!item || !isCompletedBatchCompressionJobItem(item) || isDisposed) {
+			return false;
+		}
+
+		focusedResultId = id;
+		isFocusedResultManual = true;
+
+		return true;
 	}
 
 	function createQueuedItem(file: File, preset: CompressionPreset): BatchCompressionJobItem {
@@ -237,6 +264,8 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 				...item,
 				file,
 				originalType: metadata.type,
+				originalWidth: metadata.width,
+				originalHeight: metadata.height,
 				width: metadata.width,
 				height: metadata.height,
 				status: 'waiting',
@@ -311,6 +340,10 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 				outputUrl,
 				result
 			}));
+
+			if (!isFocusedResultManual) {
+				focusedResultId = id;
+			}
 		} catch (caughtError) {
 			failQueuedFile(
 				id,
@@ -403,12 +436,28 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		}
 	}
 
+	function resolveFocusedItem(): CompletedBatchCompressionJobItem | undefined {
+		const focusedItem = completedItems.find((item) => item.id === focusedResultId);
+
+		return focusedItem ?? latestCompletedItem();
+	}
+
+	function latestCompletedItem(): CompletedBatchCompressionJobItem | undefined {
+		return items.filter(isCompletedBatchCompressionJobItem).at(-1);
+	}
+
 	return {
 		get items() {
 			return items;
 		},
 		get completedItems() {
 			return completedItems;
+		},
+		get focusedItem() {
+			return focusedItem;
+		},
+		get previewItem() {
+			return previewItem;
 		},
 		get failedCount() {
 			return failedCount;
@@ -450,6 +499,7 @@ export function createBatchCompressionJob(dependencies: BatchCompressionJobDepen
 		maxFileSize: MAX_FILE_SIZE,
 		queueFiles,
 		createResultZip,
+		focusItem,
 		removeItem,
 		clear,
 		dispose

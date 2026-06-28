@@ -1,11 +1,13 @@
 <script lang="ts">
 	import type { CompressionStatus } from '$lib/types';
 
+	type PreviewStatus = 'reading' | CompressionStatus;
+
 	type Props = {
 		originalUrl?: string;
 		outputUrl?: string;
 		imageName: string;
-		status: CompressionStatus;
+		status: PreviewStatus;
 		statusLabel: string;
 		width?: number;
 		height?: number;
@@ -15,23 +17,24 @@
 		$props<Props>();
 
 	let position = $state(50);
-	let previousOutputUrl = $state<string | undefined>();
+	let previousResetKey = $state('');
 
 	const aspectRatio = $derived(width && height ? `${width} / ${height}` : '1 / 1');
 	const comparisonMaxWidth = $derived(
-		width && height ? `${Math.round((360 * width) / height)}px` : '360px'
+		width && height ? `${Math.round((520 * width) / height)}px` : '520px'
 	);
 	const comparisonStyle = $derived(
 		`--reveal: ${position}%; --comparison-max-width: ${comparisonMaxWidth}; aspect-ratio: ${aspectRatio};`
 	);
+	const resetKey = $derived(`${originalUrl ?? ''}|${outputUrl ?? ''}|${imageName}`);
 
 	$effect(() => {
-		if (outputUrl === previousOutputUrl) {
+		if (resetKey === previousResetKey) {
 			return;
 		}
 
 		position = 50;
-		previousOutputUrl = outputUrl;
+		previousResetKey = resetKey;
 	});
 
 	function handleInput(event: Event) {
@@ -86,7 +89,7 @@
 		display: grid;
 		place-items: center;
 		width: min(100%, var(--comparison-max-width));
-		max-height: 360px;
+		max-height: 520px;
 		margin-inline: auto;
 		overflow: hidden;
 		border: 1px solid var(--color-line);
