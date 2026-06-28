@@ -6,47 +6,24 @@
 		setCompressionOutputType,
 		setCompressionPreset
 	} from '$lib/compression-settings.svelte';
-	import { compressImage } from '$lib/compress';
-	import { calculateSavingsPercent, formatBytes, formatSavings, labelForOutputType } from '$lib/format';
-	import { readImageMetadata } from '$lib/image-metadata';
+	import {
+		createBatchCompressionJob,
+		isActiveBatchCompressionJobItem as isActive,
+		isAlreadyOptimizedBatchCompressionJobItem as isAlreadyOptimized,
+		isCompletedBatchCompressionJobItem as isCompleted,
+		isLargerBatchCompressionJobItem as isLarger,
+		type BatchCompressionJobItem,
+		type BatchCompressionJobItemStatus
+	} from '$lib/batch-compression-job.svelte';
+	import { formatBytes, formatSavings, labelForOutputType } from '$lib/format';
 	import { presets } from '$lib/presets';
 	import {
-		MAX_BATCH_SIZE,
-		MAX_FILE_SIZE,
 		OUTPUT_TYPES,
-		SUPPORTED_INPUT_TYPES,
 		type CompressionPreset,
-		type CompressionResult,
 		type PresetId
 	} from '$lib/types';
-	import { createZip } from '$lib/zip';
 
-	type QueueItemStatus = 'reading' | 'waiting' | 'compressing' | 'complete' | 'failed';
-
-	type QueueItem = {
-		id: string;
-		file?: File;
-		originalName: string;
-		originalType: string;
-		originalSize: number;
-		width?: number;
-		height?: number;
-		status: QueueItemStatus;
-		progress: number;
-		preset: CompressionPreset;
-		originalUrl?: string;
-		outputUrl?: string;
-		result?: CompressionResult;
-		error?: string;
-	};
-
-	type CompletedQueueItem = QueueItem & {
-		file: File;
-		outputUrl: string;
-		result: CompressionResult;
-	};
-
-	const statusLabels: Record<QueueItemStatus, string> = {
+	const statusLabels: Record<BatchCompressionJobItemStatus, string> = {
 		reading: 'Reading',
 		waiting: 'Waiting',
 		compressing: 'Compressing',
@@ -62,16 +39,11 @@
 
 	let fileInput = $state<HTMLInputElement>();
 	let settingsMenu = $state<HTMLElement>();
-	let items = $state<QueueItem[]>([]);
 	let isDragging = $state(false);
 	let showSettings = $state(false);
-	let isProcessing = $state(false);
-	let isZipping = $state(false);
-	let queueError = $state('');
-	let zipError = $state('');
 
 	let dragDepth = 0;
-	const progressTimers = new Map<string, number>();
+	const batchJob = createBatchCompressionJob();
 
 	const presetId = $derived(compressionSettings.presetId);
 	const outputType = $derived(compressionSettings.outputType);
@@ -84,34 +56,19 @@
 			? { ...selectedPreset, outputType, quality: 1, maxWidth: null }
 			: { ...selectedPreset, outputType }
 	);
-	const completedItems = $derived(items.filter(isCompleted));
-	const failedCount = $derived(items.filter((item) => item.status === 'failed').length);
-	const isBusy = $derived(
-		isProcessing ||
-			items.some(
-				(item) =>
-					item.status === 'reading' ||
-					item.status === 'waiting' ||
-					item.status === 'compressing'
-			)
-	);
-	const remainingSlots = $derived(Math.max(MAX_BATCH_SIZE - items.length, 0));
-	const totalOriginalSize = $derived(
-		completedItems.reduce((total, item) => total + item.result.originalSize, 0)
-	);
-	const totalOutputSize = $derived(
-		completedItems.reduce((total, item) => total + item.result.outputSize, 0)
-	);
-	const totalSavingsPercent = $derived(
-		calculateSavingsPercent(totalOriginalSize, totalOutputSize)
-	);
-	const compressedBytes = $derived(Math.max(totalOriginalSize - totalOutputSize, 0));
-	const featuredItem = $derived(
-		items.find((item) => item.status === 'compressing') ??
-			items.find((item) => item.status === 'reading') ??
-			[...items].reverse().find((item) => item.originalUrl) ??
-			items[0]
-	);
+	const items = $derived(batchJob.items);
+	const completedItems = $derived(batchJob.completedItems);
+	const failedCount = $derived(batchJob.failedCount);
+	const isBusy = $derived(batchJob.isBusy);
+	const isZipping = $derived(batchJob.isZipping);
+	const queueError = $derived(batchJob.queueError);
+	const zipError = $derived(batchJob.zipError);
+	const remainingSlots = $derived(batchJob.remainingSlots);
+	const totalOriginalSize = $derived(batchJob.totalOriginalSize);
+	const totalOutputSize = $derived(batchJob.totalOutputSize);
+	const totalSavingsPercent = $derived(batchJob.totalSavingsPercent);
+	const compressedBytes = $derived(batchJob.compressedBytes);
+	const featuredItem = $derived(batchJob.featuredItem);
 	const featuredProgress = $derived(featuredItem?.progress ?? 0);
 	const dropTitle = $derived(
 		isDragging
@@ -130,14 +87,16 @@
 			: isBusy && featuredItem
 				? `${statusLabels[featuredItem.status]} ${featuredItem.originalName}.`
 				: remainingSlots === 0
-					? `Batch limit reached: ${MAX_BATCH_SIZE} images.`
+					? `Batch limit reached: ${batchJob.maxBatchSize} images.`
 					: items.length > 0
 						? `${completedItems.length} complete, ${failedCount} failed, ${remainingSlots} slots open.`
-						: `Click to choose or drop JPEG, PNG, or WebP files. ${formatBytes(MAX_FILE_SIZE)} each.`
+						: `Click to choose or drop JPEG, PNG, or WebP files. ${formatBytes(
+								batchJob.maxFileSize
+							)} each.`
 	);
 	const batchStatus = $derived(
 		items.length === 0
-			? `${MAX_BATCH_SIZE} image batch limit`
+			? `${batchJob.maxBatchSize} image batch limit`
 			: `${completedItems.length} complete / ${items.length} total`
 	);
 
@@ -146,8 +105,7 @@
 	});
 
 	onDestroy(() => {
-		clearAllProgress();
-		revokeQueueUrls(items);
+		batchJob.dispose();
 	});
 
 	function handleWindowKeydown(event: KeyboardEvent) {
@@ -214,296 +172,26 @@
 	}
 
 	async function queueFiles(fileList: FileList | File[]) {
-		const incoming = Array.from(fileList);
-
-		if (incoming.length === 0) {
-			return;
-		}
-
-		queueError = '';
-		zipError = '';
-
-		const slotsAvailable = MAX_BATCH_SIZE - items.length;
-
-		if (slotsAvailable <= 0) {
-			queueError = `Crush can handle up to ${MAX_BATCH_SIZE} images in one batch.`;
-			return;
-		}
-
-		const selectedFiles = incoming.slice(0, slotsAvailable);
-
-		if (incoming.length > selectedFiles.length) {
-			queueError = `Only the first ${selectedFiles.length} files were added. The batch limit is ${MAX_BATCH_SIZE}.`;
-		}
-
-		const queuedItems = selectedFiles.map((file) => createQueuedItem(file, activePreset));
-		items = [...items, ...queuedItems];
-
-		for (let index = 0; index < selectedFiles.length; index += 1) {
-			await prepareQueuedFile(queuedItems[index].id, selectedFiles[index]);
-		}
-
-		void processQueue();
-	}
-
-	function createQueuedItem(file: File, preset: CompressionPreset): QueueItem {
-		return {
-			id: crypto.randomUUID(),
-			originalName: file.name || 'Untitled image',
-			originalType: file.type || 'Unknown',
-			originalSize: file.size,
-			status: 'reading',
-			progress: 12,
-			preset: clonePreset(preset)
-		};
-	}
-
-	function clonePreset(preset: CompressionPreset): CompressionPreset {
-		return {
-			id: preset.id,
-			label: preset.label,
-			description: preset.description,
-			outputType: preset.outputType,
-			quality: preset.quality,
-			maxWidth: preset.maxWidth
-		};
-	}
-
-	async function prepareQueuedFile(id: string, file: File) {
-		startItemProgress(id, 12, 42);
-
-		if (!SUPPORTED_INPUT_TYPES.includes(file.type as (typeof SUPPORTED_INPUT_TYPES)[number])) {
-			failQueuedFile(id, 'Unsupported file. Add a JPEG, PNG, or WebP image.');
-			return;
-		}
-
-		if (file.size === 0) {
-			failQueuedFile(id, 'This file is empty.');
-			return;
-		}
-
-		if (file.size > MAX_FILE_SIZE) {
-			failQueuedFile(id, `This file is larger than the ${formatBytes(MAX_FILE_SIZE)} limit.`);
-			return;
-		}
-
-		const originalUrl = URL.createObjectURL(file);
-
-		try {
-			const metadata = await readImageMetadata(file);
-
-			clearItemProgress(id);
-			updateItem(id, (item) => ({
-				...item,
-				file,
-				originalType: metadata.type,
-				width: metadata.width,
-				height: metadata.height,
-				status: 'waiting',
-				progress: 44,
-				originalUrl
-			}));
-		} catch {
-			URL.revokeObjectURL(originalUrl);
-			failQueuedFile(id, 'This image could not be read. It may be corrupt or unsupported.');
-		}
-	}
-
-	async function processQueue() {
-		if (isProcessing) {
-			return;
-		}
-
-		isProcessing = true;
-
-		try {
-			while (true) {
-				const nextItem = items.find((item) => item.status === 'waiting' && item.file);
-
-				if (!nextItem?.file) {
-					break;
-				}
-
-				await compressQueuedItem(nextItem.id, nextItem.file, clonePreset(nextItem.preset));
-			}
-		} finally {
-			isProcessing = false;
-		}
-	}
-
-	async function compressQueuedItem(id: string, file: File, preset: CompressionPreset) {
-		updateItem(id, (item) => {
-			if (item.outputUrl) {
-				URL.revokeObjectURL(item.outputUrl);
-			}
-
-			return {
-				...item,
-				status: 'compressing',
-				progress: 48,
-				outputUrl: undefined,
-				result: undefined,
-				error: undefined
-			};
-		});
-		startItemProgress(id, 48, 88);
-
-		try {
-			const result = await compressImage(id, file, preset);
-			const outputUrl = URL.createObjectURL(result.outputBlob);
-
-			clearItemProgress(id);
-
-			if (!items.some((item) => item.id === id)) {
-				URL.revokeObjectURL(outputUrl);
-				return;
-			}
-
-			updateItem(id, (item) => ({
-				...item,
-				status: 'complete',
-				progress: 100,
-				width: result.width,
-				height: result.height,
-				outputUrl,
-				result
-			}));
-		} catch (caughtError) {
-			failQueuedFile(
-				id,
-				messageFromError(
-					caughtError,
-					'This image could not be compressed. Try a smaller file or a different format.'
-				)
-			);
-		}
+		await batchJob.queueFiles(fileList, activePreset);
 	}
 
 	async function downloadZip() {
-		if (completedItems.length === 0 || isZipping) {
-			return;
-		}
+		const zip = await batchJob.createResultZip();
 
-		isZipping = true;
-		zipError = '';
-
-		try {
-			const zip = await createZip(
-				completedItems.map((item) => ({
-					name: item.result.outputName,
-					blob: item.result.outputBlob
-				}))
-			);
-
+		if (zip) {
 			downloadBlob(zip, 'crush-results.zip');
-		} catch (caughtError) {
-			zipError = messageFromError(caughtError, 'The ZIP file could not be created.');
-		} finally {
-			isZipping = false;
 		}
 	}
 
 	function removeItem(id: string) {
-		const item = items.find((candidate) => candidate.id === id);
-
-		if (!item || item.status === 'reading' || item.status === 'compressing') {
-			return;
-		}
-
-		clearItemProgress(id);
-		revokeItemUrls(item);
-		items = items.filter((candidate) => candidate.id !== id);
-		queueError = '';
-		zipError = '';
+		batchJob.removeItem(id);
 	}
 
 	function clearQueue() {
-		if (isBusy) {
-			return;
-		}
-
-		clearAllProgress();
-		revokeQueueUrls(items);
-		items = [];
-		queueError = '';
-		zipError = '';
+		batchJob.clear();
 	}
 
-	function failQueuedFile(id: string, message: string) {
-		clearItemProgress(id);
-		updateItem(id, (item) => ({
-			...item,
-			status: 'failed',
-			progress: 0,
-			error: message
-		}));
-	}
-
-	function startItemProgress(id: string, start: number, ceiling: number) {
-		clearItemProgress(id);
-		updateItem(id, (item) => ({
-			...item,
-			progress: start
-		}));
-
-		const timer = window.setInterval(() => {
-			updateItem(id, (item) => {
-				const remaining = ceiling - item.progress;
-
-				if (remaining <= 0) {
-					return item;
-				}
-
-				return {
-					...item,
-					progress: Math.min(ceiling, item.progress + Math.max(1, Math.round(remaining * 0.18)))
-				};
-			});
-		}, 180);
-
-		progressTimers.set(id, timer);
-	}
-
-	function clearItemProgress(id: string) {
-		const timer = progressTimers.get(id);
-
-		if (!timer) {
-			return;
-		}
-
-		window.clearInterval(timer);
-		progressTimers.delete(id);
-	}
-
-	function clearAllProgress() {
-		for (const timer of progressTimers.values()) {
-			window.clearInterval(timer);
-		}
-
-		progressTimers.clear();
-	}
-
-	function updateItem(id: string, updater: (item: QueueItem) => QueueItem) {
-		items = items.map((item) => (item.id === id ? updater(item) : item));
-	}
-
-	function isCompleted(item: QueueItem): item is CompletedQueueItem {
-		return item.status === 'complete' && Boolean(item.file && item.outputUrl && item.result);
-	}
-
-	function isActive(item: QueueItem): boolean {
-		return item.status === 'reading' || item.status === 'compressing';
-	}
-
-	function isLarger(item: QueueItem): boolean {
-		return isCompleted(item) && item.result.outputSize > item.result.originalSize;
-	}
-
-	function isAlreadyOptimized(item: QueueItem): boolean {
-		return isCompleted(item) && item.result.note === 'already-optimized';
-	}
-
-	function dimensionsFor(item: QueueItem): string {
+	function dimensionsFor(item: BatchCompressionJobItem): string {
 		if (!item.width || !item.height) {
 			return '-';
 		}
@@ -511,7 +199,7 @@
 		return `${item.width} x ${item.height}`;
 	}
 
-	function detailsFor(item: QueueItem): string {
+	function detailsFor(item: BatchCompressionJobItem): string {
 		if (isCompleted(item)) {
 			return `${labelForOutputType(item.result.outputType)} - ${dimensionsFor(item)}`;
 		}
@@ -565,26 +253,6 @@
 		anchor.remove();
 
 		window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-	}
-
-	function revokeQueueUrls(queueItems: QueueItem[]) {
-		for (const item of queueItems) {
-			revokeItemUrls(item);
-		}
-	}
-
-	function revokeItemUrls(item: QueueItem) {
-		if (item.originalUrl) {
-			URL.revokeObjectURL(item.originalUrl);
-		}
-
-		if (item.outputUrl) {
-			URL.revokeObjectURL(item.outputUrl);
-		}
-	}
-
-	function messageFromError(caughtError: unknown, fallback: string): string {
-		return caughtError instanceof Error && caughtError.message ? caughtError.message : fallback;
 	}
 </script>
 
@@ -719,7 +387,7 @@
 							<strong>{`${items.length} image${items.length === 1 ? '' : 's'}`}</strong>
 							<span>{batchStatus}</span>
 						</span>
-						<span class="file-size">{formatBytes(MAX_FILE_SIZE)} max</span>
+						<span class="file-size">{formatBytes(batchJob.maxFileSize)} max</span>
 					</div>
 
 					<div class="queue-actions">
